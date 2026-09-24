@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Build output
+dist/
+build/
+out/
+coverage/
+.next/
+.nuxt/
+.turbo/
+.cache/
+.parcel-cache/
+
+# Logs and runtime files
+*.log
+logs/
+*.pid
+*.seed
+
+# TypeScript and tooling caches
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+
+# Test and coverage output
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+
+# IDE settings
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Mobile and native build artifacts
+.gradle/
+local.properties
+*.apk
+*.aab
+*.ipa
