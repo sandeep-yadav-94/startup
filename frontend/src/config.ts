@@ -1,0 +1,1 @@
+export const authService = "http://localhost:5000";
