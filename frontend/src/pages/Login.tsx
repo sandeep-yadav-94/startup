@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import { useGoogleLogin } from '@react-oauth/google';
 import {FcGoogle} from  "react-icons/fc"
 import { motion, useReducedMotion } from "framer-motion";
+import { useAppData } from "../context/AppContext";
 
 
 
@@ -19,6 +20,7 @@ const login = () => {
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const shouldReduceMotion = useReducedMotion();
+    const { setIsAuth, setUser } = useAppData();
 
     const responseGoogle = async (authResult: any) => {
         setLoading(true);
@@ -27,6 +29,8 @@ const login = () => {
                 code: authResult["code"],
             })
             localStorage.setItem("token", result.data.token);
+            setUser(result.data.user);
+            setIsAuth(true);
             toast.success(result.data.message);
             setLoading(false);
             navigate("/");
