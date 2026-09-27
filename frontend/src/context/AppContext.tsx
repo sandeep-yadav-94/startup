@@ -9,6 +9,74 @@ interface AppProviderProps {
   children:ReactNode;
 }
 
+const requestLocation = (
+    setLocation: AppContextType["setLocation"],
+    setCity: AppContextType["setCity"],
+    setLoadingLocation: AppContextType["setLoadingLocation"],
+) => {
+    if (!navigator.geolocation) {
+        setCity("Location unavailable");
+        return;
+    }
+
+    setLoadingLocation(true);
+    navigator.geolocation.getCurrentPosition(async (position) => {
+        const { latitude, longitude } = position.coords;
+
+        try {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10`,
+                { headers: { Accept: "application/json" } },
+            );
+
+            if (!response.ok) {
+                throw new Error(`Reverse geocoding failed: ${response.status}`);
+            }
+
+            const data: {
+                display_name?: string;
+                address?: {
+                    city?: string;
+                    municipality?: string;
+                    town?: string;
+                    state_district?: string;
+                    county?: string;
+                };
+            } = await response.json();
+
+            setLocation({
+                latitude,
+                longitude,
+                formattedAddress: data.display_name || "Current location",
+            });
+
+            const address = data.address ?? {};
+            setCity(
+                address.city ||
+                address.municipality ||
+                address.town ||
+                address.state_district ||
+                address.county ||
+                "Your Location",
+            );
+        } catch (error) {
+            console.error("Location reverse geocoding error:", error);
+            setLocation({ latitude, longitude, formattedAddress: "Current Location" });
+            setCity("Your Location");
+        } finally {
+            setLoadingLocation(false);
+        }
+    }, (error) => {
+        console.error("Browser geolocation error:", error);
+        setLoadingLocation(false);
+        setCity(error.code === error.PERMISSION_DENIED ? "Location permission needed" : "Location unavailable");
+    }, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+    });
+};
+
 export const AppProvider = ({ children }:AppProviderProps) => {
 
     const [user, setUser] = useState<User | null>(null);
@@ -47,87 +115,13 @@ export const AppProvider = ({ children }:AppProviderProps) => {
         fetchUser();
     }, []);
 
+    const refreshLocation = () => requestLocation(setLocation, setCity, setLoadingLocation);
+
     useEffect(() => {
-        if (!navigator.geolocation) {
-            setCity("Location unavailable");
-            return;
-        }
-
-        setLoadingLocation(true);
-
-        navigator.geolocation.getCurrentPosition(async (position) => {
-            const { latitude, longitude, accuracy } = position.coords;
-            console.info("Browser geolocation:", {
-                latitude,
-                longitude,
-                accuracy,
-            });
-
-            try {
-                const response = await fetch(
-                    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10`,
-                    {
-                        headers: {
-                            Accept: "application/json",
-                        },
-                    },
-                );
-
-                if (!response.ok) {
-                    throw new Error(`Reverse geocoding failed: ${response.status}`);
-                }
-
-                const data: {
-                    display_name?: string;
-                    address?: {
-                        city?: string;
-                        municipality?: string;
-                        town?: string;
-                        state_district?: string;
-                        county?: string;
-                    };
-                } = await response.json();
-
-                console.info("Nominatim address:", data.address);
-
-                setLocation({
-                    latitude,
-                    longitude,
-                    formattedAddress: data.display_name || "Current location",
-                });
-
-                const address = data.address ?? {};
-                setCity(
-                    address.city ||
-                    address.municipality ||
-                    address.town ||
-                    address.state_district ||
-                    address.county ||
-                    "Your Location",
-                );
-            } catch (error) {
-                console.error("Location reverse geocoding error:", error);
-                setLocation({
-                    latitude,
-                    longitude,
-                    formattedAddress: "Current Location",
-                });
-                setCity("Failed to load");
-            } finally {
-                setLoadingLocation(false);
-            }
-        }, (error) => {
-            console.error("Browser geolocation error:", error);
-            setLoadingLocation(false);
-            setCity("Location unavailable");
-        }, {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 0,
-        });
+        requestLocation(setLocation, setCity, setLoadingLocation);
     }, []);
 
-    return <AppContext.Provider value={{ user, isAuth, loading, setUser, setIsAuth, setLoading, location, setLocation, loadingLocation, setLoadingLocation, city, setCity }}>
+    return <AppContext.Provider value={{ user, isAuth, loading, setUser, setIsAuth, setLoading, location, setLocation, loadingLocation, setLoadingLocation, city, setCity, refreshLocation }}>
         {children}
     </AppContext.Provider>
 }

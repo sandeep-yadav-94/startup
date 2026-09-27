@@ -63,6 +63,10 @@ export const addBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
             formattedAddress,
         }
     })
+    console.log("Business created successfully:", JSON.stringify({
+        businessId: createdBusiness._id.toString(),
+        business: createdBusiness.toObject(),
+    }, null, 2));
     return res.status(201).json({
         message:"Business created Successfully",
         business:createdBusiness,
@@ -82,6 +86,10 @@ export const fetchMyBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
             message:"Business not found",
         })
     }
+    console.log("Fetched business response:", JSON.stringify({
+        businessId: myBusiness._id.toString(),
+        business: myBusiness.toObject(),
+    }, null, 2));
     let token: string | undefined;
     if(!user.businessId){
         const jwtSecret = process.env.JWT_SECRET;
@@ -103,3 +111,57 @@ export const fetchMyBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
         ...(token ? {token} : {}),
     })
 })
+
+export const editBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
+    const user = req.user;
+    if(!user){
+        return res.status(401).json({message:"Please login"});
+    }
+
+    const {name, description} = req.body;
+    if(typeof name !== "string" || !name.trim()){
+        return res.status(400).json({message:"Business name is required"});
+    }
+
+    const updatedBusiness = await business.findOneAndUpdate(
+        {ownerId:user._id},
+        {$set:{name:name.trim(), description:typeof description === "string" ? description.trim() : ""}},
+        {new:true, runValidators:true},
+    );
+    if(!updatedBusiness){
+        return res.status(404).json({message:"Business not found"});
+    }
+
+    return res.status(200).json({
+        message:"Business profile updated",
+        business:updatedBusiness,
+    });
+});
+
+export const updateBusinessStatus = TryCatch(async(req:AuthenticatedRequest, res)=>{
+    const user = req.user;
+    if(!user){
+        return res.status(401).json({message:"Please login"});
+    }
+
+    const {status} = req.body;
+    if(typeof status !== "boolean"){
+        return res.status(400).json({message:"A valid business status is required"});
+    }
+
+    const updatedBusiness = await business.findOneAndUpdate(
+        {ownerId:user._id},
+        {$set:{isOpen:status}},
+        {new:true, runValidators:true},
+    );
+    if(!updatedBusiness){
+        return res.status(404).json({message:"Business not found"});
+    }
+
+    return res.status(200).json({
+        message:status ? "Your business is now open" : "Your business is now closed",
+        business:updatedBusiness,
+    });
+});
+
+

@@ -22,7 +22,26 @@ export interface AppContextType {
   setLoadingLocation: (loading: boolean) => void;
   city: string;
   setCity: (city: string) => void;
+  refreshLocation: () => void;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   setIsAuth: React.Dispatch<React.SetStateAction<boolean>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+export interface IBusiness{
+   _id:string;
+    name : string;
+    description?:string;
+    image:string;
+    ownerId:string;
+    phone:number;
+    isVerified:boolean;
+
+    autoLocation:{
+        type: "Point",
+        coordinates: [number, number];
+        formattedAddress:string;
+    }
+    isOpen:boolean;
+    createdAt:Date;
 }
