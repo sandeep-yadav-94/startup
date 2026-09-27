@@ -7,8 +7,17 @@ import ProtectedRoute from "./components/protectedRoute";
 import SelectRole from "./pages/SelectRole";
 import Navbar from "./components/navbar";
 import Account from "./pages/Account";
+import { useAppData } from "./context/AppContext";
+import Business from "./pages/business";
 
 const App = () => {
+
+  const {user} = useAppData();
+
+  if(user && user.role === "merchant"){
+    return <Business />;
+  }
+
   return (
     <>
       {/* use protected routes and public routes */}
