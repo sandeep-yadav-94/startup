@@ -45,3 +45,16 @@ export interface IBusiness{
     isOpen:boolean;
     createdAt:Date;
 }
+
+
+export interface IServiceList {
+    _id: string;
+    businessId : string;
+    name : string;
+    description : string;
+    image : string;
+    price : number;
+    isAvailable : boolean;
+    createdAt : Date;
+    updatedAt : Date;
+}
