@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.post('/new', isAuth, isMerchant, uploadFile, addServiceList);
 router.get('/all/:id', isAuth, getAllServices);
-router.delete('/:id', isAuth, isMerchant, deleteServiceList);
-router.patch('/status/:id', isAuth, isMerchant, toggleServiceListAvailability);
+router.delete('/:serviceId', isAuth, isMerchant, deleteServiceList);
+router.put('/status/:serviceId', isAuth, isMerchant, toggleServiceListAvailability);
 
 export default router;
