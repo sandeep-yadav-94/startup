@@ -22,7 +22,7 @@ export interface AppContextType {
   setLoadingLocation: (loading: boolean) => void;
   city: string;
   setCity: (city: string) => void;
-  refreshLocation: () => void;
+  refreshLocation: () => Promise<Location | null>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   setIsAuth: React.Dispatch<React.SetStateAction<boolean>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;

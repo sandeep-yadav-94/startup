@@ -13,19 +13,19 @@ const requestLocation = (
     setLocation: AppContextType["setLocation"],
     setCity: AppContextType["setCity"],
     setLoadingLocation: AppContextType["setLoadingLocation"],
-) => {
+): Promise<Location | null> => {
     if (!navigator.geolocation) {
         setCity("Location unavailable");
-        return;
+        return Promise.resolve(null);
     }
 
     setLoadingLocation(true);
-    navigator.geolocation.getCurrentPosition(async (position) => {
+    return new Promise((resolve) => navigator.geolocation.getCurrentPosition(async (position) => {
         const { latitude, longitude } = position.coords;
 
         try {
             const response = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10`,
+                `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18`,
                 { headers: { Accept: "application/json" } },
             );
 
@@ -44,11 +44,12 @@ const requestLocation = (
                 };
             } = await response.json();
 
-            setLocation({
+            const nextLocation = {
                 latitude,
                 longitude,
                 formattedAddress: data.display_name || "Current location",
-            });
+            };
+            setLocation(nextLocation);
 
             const address = data.address ?? {};
             setCity(
@@ -59,10 +60,12 @@ const requestLocation = (
                 address.county ||
                 "Your Location",
             );
+            resolve(nextLocation);
         } catch (error) {
             console.error("Location reverse geocoding error:", error);
             setLocation({ latitude, longitude, formattedAddress: "Current Location" });
             setCity("Your Location");
+            resolve(null);
         } finally {
             setLoadingLocation(false);
         }
@@ -70,11 +73,12 @@ const requestLocation = (
         console.error("Browser geolocation error:", error);
         setLoadingLocation(false);
         setCity(error.code === error.PERMISSION_DENIED ? "Location permission needed" : "Location unavailable");
+        resolve(null);
     }, {
         enableHighAccuracy: true,
         timeout: 15000,
         maximumAge: 0,
-    });
+    }));
 };
 
 export const AppProvider = ({ children }:AppProviderProps) => {

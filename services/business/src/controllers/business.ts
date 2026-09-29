@@ -164,4 +164,85 @@ export const updateBusinessStatus = TryCatch(async(req:AuthenticatedRequest, res
     });
 });
 
+export const updateBusinessLocation = TryCatch(async(req:AuthenticatedRequest, res)=>{
+    const user = req.user;
+    if(!user){
+        return res.status(401).json({message:"Please login"});
+    }
+
+    const {latitude, longitude, formattedAddress} = req.body;
+    if(typeof formattedAddress !== "string" || !formattedAddress.trim()){
+        return res.status(400).json({message:"A valid business address is required"});
+    }
+
+    const updates: { "autoLocation.formattedAddress": string; "autoLocation.coordinates"?: number[] } = {
+        "autoLocation.formattedAddress":formattedAddress.trim(),
+    };
+    if(latitude !== undefined || longitude !== undefined){
+        const latitudeNumber = Number(latitude);
+        const longitudeNumber = Number(longitude);
+        if(!Number.isFinite(latitudeNumber) || latitudeNumber < -90 || latitudeNumber > 90 || !Number.isFinite(longitudeNumber) || longitudeNumber < -180 || longitudeNumber > 180){
+            return res.status(400).json({message:"A valid location is required"});
+        }
+        updates["autoLocation.coordinates"] = [longitudeNumber, latitudeNumber];
+    }
+
+    const updatedBusiness = await business.findOneAndUpdate(
+        {ownerId:user._id},
+        {$set:updates},
+        {new:true, runValidators:true},
+    );
+    if(!updatedBusiness){
+        return res.status(404).json({message:"Business not found"});
+    }
+
+    return res.status(200).json({
+        message:"Business address updated",
+        business:updatedBusiness,
+    });
+});
+
+
+export const getNearbyBusiness = TryCatch(async(req, res) => {
+    const { latitude, longitude, radius=5000, search="" } = req.query;
+    if(!latitude || !longitude){
+        return res.status(400).json({
+            message:"Latitude and Longitude are required",
+        })
+    }
+    const query : any = {
+        isVerified:true
+    }
+    if(search && typeof search === "string"){
+        query.name = {$regex : search, $option : "i"};
+    }
+    const businesses = await business.aggregate([
+        {
+            $geoNear : {
+                near:{
+                    type:"Point",
+                    coordinates: [Number(longitude), Number(latitude)]
+                },
+                distanceField: "distance",
+                maxDistance:Number(radius),
+                spherical:true,
+                query,
+            }
+        },
+        {
+            $sort:{
+                isOpen : -1,
+                distance : 1
+            },
+        },
+        {
+            $addFields:{
+                distanceKm:{
+                    $round:[{$divide : ["$distance", 1000]}, 2]
+                }
+            }
+        }
+    ])
+})
+
 

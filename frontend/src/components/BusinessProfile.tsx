@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { FiCalendar, FiCheckCircle, FiEdit2, FiLoader, FiMapPin, FiPhone, FiSave, FiShield, FiX } from "react-icons/fi";
+import { FiCalendar, FiCheckCircle, FiEdit2, FiLoader, FiMapPin, FiPhone, FiRefreshCw, FiSave, FiShield, FiX } from "react-icons/fi";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { businessService } from "../config";
+import { useAppData } from "../context/AppContext";
 import type { IBusiness } from "../types";
 
 interface Props {
@@ -19,6 +20,10 @@ const BusinessProfile = ({ business, isMerchant, onUpdate }: Props) => {
     const [isOpen, setIsOpen] = useState(business.isOpen);
     const [saving, setSaving] = useState(false);
     const [updatingStatus, setUpdatingStatus] = useState(false);
+    const [updatingLocation, setUpdatingLocation] = useState(false);
+    const [editingAddress, setEditingAddress] = useState(false);
+    const [addressDraft, setAddressDraft] = useState(business.autoLocation.formattedAddress);
+    const { refreshLocation } = useAppData();
 
     const startEditing = () => {
         setName(business.name);
@@ -79,6 +84,59 @@ const BusinessProfile = ({ business, isMerchant, onUpdate }: Props) => {
             toast.error(message || "Unable to update business availability");
         } finally {
             setUpdatingStatus(false);
+        }
+    };
+
+    const updateLocation = async () => {
+        try {
+            setUpdatingLocation(true);
+            const location = await refreshLocation();
+            if (!location) {
+                toast.error("Unable to get your precise address. Check location permission and try again.");
+                return;
+            }
+            const { data } = await axios.put<{ message: string; business: IBusiness }>(
+                `${businessService}/api/business/location`,
+                location,
+                { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } },
+            );
+            onUpdate(data.business);
+            toast.success(data.message);
+        } catch (error: unknown) {
+            const message = axios.isAxiosError<{ message?: string }>(error)
+                ? error.response?.data?.message
+                : undefined;
+            toast.error(message || "Unable to update your business address");
+        } finally {
+            setUpdatingLocation(false);
+        }
+    };
+
+    const saveAddress = async () => {
+        const formattedAddress = addressDraft.trim();
+        if (!formattedAddress) {
+            toast.error("Enter your complete business address");
+            return;
+        }
+
+        try {
+            setUpdatingLocation(true);
+            const { data } = await axios.put<{ message: string; business: IBusiness }>(
+                `${businessService}/api/business/location`,
+                { formattedAddress },
+                { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } },
+            );
+            onUpdate(data.business);
+            setAddressDraft(formattedAddress);
+            setEditingAddress(false);
+            toast.success(data.message);
+        } catch (error: unknown) {
+            const message = axios.isAxiosError<{ message?: string }>(error)
+                ? error.response?.data?.message
+                : undefined;
+            toast.error(message || "Unable to save your business address");
+        } finally {
+            setUpdatingLocation(false);
         }
     };
 
@@ -192,7 +250,7 @@ const BusinessProfile = ({ business, isMerchant, onUpdate }: Props) => {
                             </div>
                             <div className="flex items-start gap-3 py-4">
                                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#f8f2ed] text-[#AF6028]"><FiMapPin size={16} /></span>
-                                <div className="min-w-0"><p className="text-[10px] font-bold tracking-widest text-[#87908a]">BUSINESS ADDRESS</p><p className="mt-1 text-sm leading-5 text-[#343c37]">{business.autoLocation.formattedAddress || "Location unavailable"}</p><p className="mt-1 font-mono text-[10px] text-[#929a94]">{business.autoLocation.coordinates[1].toFixed(5)}, {business.autoLocation.coordinates[0].toFixed(5)}</p></div>
+                                <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[10px] font-bold tracking-widest text-[#87908a]">BUSINESS ADDRESS</p>{isMerchant && <div className="flex flex-wrap gap-2">{!editingAddress && <button type="button" onClick={() => { setAddressDraft(business.autoLocation.formattedAddress); setEditingAddress(true); }} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#e1e5df] px-2.5 text-xs font-medium text-[#626b65] transition hover:border-[#AF6028] hover:text-[#AF6028]"><FiEdit2 size={13} />Enter exact address</button>}<button type="button" onClick={updateLocation} disabled={updatingLocation || editingAddress} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#e1e5df] px-2.5 text-xs font-medium text-[#626b65] transition hover:border-[#AF6028] hover:text-[#AF6028] disabled:cursor-wait disabled:opacity-60">{updatingLocation ? <FiLoader className="animate-spin" size={13} /> : <FiRefreshCw size={13} />}{updatingLocation ? "Updating..." : "Refresh GPS"}</button></div>}</div>{editingAddress ? <><textarea value={addressDraft} onChange={(event) => setAddressDraft(event.target.value)} maxLength={300} rows={3} aria-label="Exact business address" placeholder="House or shop, street, area, city, state, PIN code" className="mt-2 w-full resize-y rounded-md border border-[#dce2dd] bg-white px-3 py-2 text-sm leading-5 text-[#343c37] outline-none focus:border-[#AF6028]" /><div className="mt-2 flex gap-2"><button type="button" onClick={saveAddress} disabled={updatingLocation} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#36824b] px-3 text-xs font-semibold text-white disabled:opacity-60">{updatingLocation ? <FiLoader className="animate-spin" size={13} /> : <FiSave size={13} />}Save address</button><button type="button" onClick={() => { setAddressDraft(business.autoLocation.formattedAddress); setEditingAddress(false); }} disabled={updatingLocation} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#e1e5df] px-3 text-xs font-medium text-[#626b65] disabled:opacity-60"><FiX size={13} />Cancel</button></div></> : <p className="mt-1 text-sm leading-5 text-[#343c37]">{business.autoLocation.formattedAddress || "Location unavailable"}</p>}<p className="mt-1 font-mono text-[10px] text-[#929a94]">{business.autoLocation.coordinates[1].toFixed(5)}, {business.autoLocation.coordinates[0].toFixed(5)}</p></div>
                             </div>
                         </div>
                     </motion.section>
