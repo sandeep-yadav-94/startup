@@ -1,5 +1,4 @@
-import { div, span } from "framer-motion/client";
-import type { IServiceList } from "../types"
+import type { IServiceList } from "../types";
 import { useState } from "react";
 import { BsCart, BsEye } from "react-icons/bs";
 import { FiEyeOff } from "react-icons/fi";
@@ -8,6 +7,7 @@ import { VscLoading } from "react-icons/vsc";
 import axios from "axios";
 import { businessService } from "../config";
 import toast from "react-hot-toast";
+import { useAppData } from "../context/AppContext";
 
 interface ServiceListProps {
   Service :IServiceList[];
@@ -16,10 +16,12 @@ interface ServiceListProps {
 }
 
 const ServiceList = ({Service, onServiceDeleted, isMerchant}:ServiceListProps) => {
-  const [loadingServiceId, setLoadingServiceId] = useState<string |null>(null)
+  const [loadingServiceId, setLoadingServiceId] = useState<string | null>(null);
+
   const handleDelete = async(serviceId:string)=>{
     const confirm = window.confirm("Sach me delete krdu bhai...");
     if(!confirm) return;
+    setLoadingServiceId(serviceId);
     try {
       await axios.delete(`${businessService}/api/service/${serviceId}`, {
         headers:{
@@ -31,11 +33,13 @@ const ServiceList = ({Service, onServiceDeleted, isMerchant}:ServiceListProps) =
     } catch (error) {
       console.log(error);
       toast.error("failed to delete this item");
+    } finally {
+      setLoadingServiceId(null);
     }
   }
 
   const toggleAvailibility = async(serviceId:string)=>{
-   
+    setLoadingServiceId(serviceId);
     try {
       const {data} = await axios.put(`${businessService}/api/service/status/${serviceId}`, {}, {
         headers:{
@@ -47,16 +51,41 @@ const ServiceList = ({Service, onServiceDeleted, isMerchant}:ServiceListProps) =
     } catch (error) {
       console.log(error);
       toast.error("failed to update status");
+    } finally {
+      setLoadingServiceId(null);
     }
 
   }
+
+
+  const {fetchCart} = useAppData()
+
+  const addToCart = async(businessId:string, serviceId:string)=>{
+    try {
+      setLoadingServiceId(serviceId);
+      const {data} = await axios.post(`${businessService}/api/cart/add`, {
+        businessId, serviceId
+      }, {
+        headers:{
+          Authorization:`Bearer ${localStorage.getItem("token")}`
+        }
+      })
+      toast.success(data.message);
+      fetchCart();
+    } catch (error:any) {
+      toast.error(error.response?.data?.message || "Unable to add to cart");
+    }finally{
+      setLoadingServiceId(null);
+    }
+  }
+
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4">
       {
         Service.map((item)=>{
           const isLoading = loadingServiceId === item._id;
-          return <div className={`relative flex gap-4 rounded-lg bg-white p-4 shadow-sm transition ${!item.isAvailable ? "opacity-70" : ""}`}>
+          return <div className={`relative flex gap-4 rounded-lg bg-white p-4 shadow-sm transition ${!item.isAvailable ? "opacity-70" : ""}`} key={item._id}>
             <div className="relative shrink-0">
               <img src={item.image} alt="" className={`h-20 w-20 rounded object-cover ${!item.isAvailable ? "grayscale brightness-75" : ""}`} />
               {
@@ -80,7 +109,7 @@ const ServiceList = ({Service, onServiceDeleted, isMerchant}:ServiceListProps) =
                 </div>
               }
               {
-                !isMerchant && <button disabled={!item.isAvailable || isLoading} onClick={()=>{}} className={`flex items-center justify-center rounded-lg p-2 ${!item.isAvailable || isLoading ? "cursor-not-allowed text-gray-400" : "text-red-500 hover:bg-red-50"}`}>
+                !isMerchant && <button disabled={!item.isAvailable || isLoading} onClick={() => addToCart(item.businessId, item._id)} className={`flex items-center justify-center rounded-lg p-2 ${!item.isAvailable || isLoading ? "cursor-not-allowed text-gray-400" : "text-red-500 hover:bg-red-50"}`}>
                   {isLoading ? <VscLoading size={18} className="animate-spin"/> : <BsCart size={18}/>}
                 </button>
               }

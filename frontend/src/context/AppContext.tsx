@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState,  type ReactNode } from "react";
-import { authService } from "../config";
+import { authService, businessService } from "../config";
 import axios from "axios";
-import type { AppContextType, Location, User } from "../types";
+import { type ICart, type AppContextType, type Location, type User } from "../types";
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -115,9 +115,40 @@ export const AppProvider = ({ children }:AppProviderProps) => {
         }
     }
 
+
+    const [cart, setCart] = useState<ICart[]>([]);
+    const [subTotal, setSubTotal] = useState(0);
+    const [quantity, setQuantity] = useState(0);
+
+    async function fetchCart() {
+        if(!user || user.role !== "customer") return;
+        try {
+            const {data} = await axios.get(`${businessService}/api/cart/all`, {
+                headers:{
+                    Authorization:`Bearer ${localStorage.getItem("token")}`
+                },
+            })
+            setCart(data.cart || []);
+            setSubTotal(data.subtotal || 0);
+            setQuantity(data.cartLength);
+        } catch (error) {
+            console.log(error);
+        }
+    }
+
+
+
     useEffect(() => {
         fetchUser();
     }, []);
+
+
+    useEffect(()=>{
+        if(user && user?.role === "customer"){
+            fetchCart();
+        }
+    }, [user]);
+
 
     const refreshLocation = () => requestLocation(setLocation, setCity, setLoadingLocation);
 
@@ -125,7 +156,7 @@ export const AppProvider = ({ children }:AppProviderProps) => {
         requestLocation(setLocation, setCity, setLoadingLocation);
     }, []);
 
-    return <AppContext.Provider value={{ user, isAuth, loading, setUser, setIsAuth, setLoading, location, setLocation, loadingLocation, setLoadingLocation, city, setCity, refreshLocation }}>
+    return <AppContext.Provider value={{ user, isAuth, loading, setUser, setIsAuth, setLoading, location, setLocation, loadingLocation, setLoadingLocation, city, setCity, refreshLocation, cart, fetchCart, quantity, subTotal }}>
         {children}
     </AppContext.Provider>
 }

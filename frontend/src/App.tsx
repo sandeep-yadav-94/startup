@@ -9,6 +9,8 @@ import Navbar from "./components/navbar";
 import Account from "./pages/Account";
 import { useAppData } from "./context/AppContext";
 import Business from "./pages/business";
+import BusinessDetails from "./pages/BusinessDetails";
+import Cart from "./pages/Cart";
 
 const App = () => {
 
@@ -36,6 +38,8 @@ const App = () => {
             <Route path="/" element={<Home />} />
             <Route path="/select-role" element={<SelectRole/>} />
             <Route path="/account" element={<Account/>} />
+            <Route path="/business/:id" element={<BusinessDetails />} />
+            <Route path="/cart" element={<Cart />} />
           </Route>
         </Routes>
         <Toaster />

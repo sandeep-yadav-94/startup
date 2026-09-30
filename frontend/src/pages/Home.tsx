@@ -1,10 +1,10 @@
 import { useSearchParams } from "react-router-dom";
-import { useAppData } from "../context/AppContext"
+import { useAppData } from "../context/AppContext";
 import { useEffect, useState } from "react";
 import type { IBusiness } from "../types";
 import { businessService } from "../config";
 import axios from "axios";
-import { div } from "framer-motion/client";
+import BusinessCard from "../components/BusinessCard";
 
 
 const Home = () => {
@@ -60,7 +60,25 @@ const Home = () => {
 
 
   return (
-    <div>Home</div>
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      {
+        businesses.length > 0 ? <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+          {
+            businesses.map((bus)=>{
+              const [busLng, busLat] = bus.autoLocation.coordinates;
+              if (!location) return null;
+              const distance = getDistanceKm(
+                location.latitude,
+                location.longitude,
+                busLat,
+                busLng
+              ) 
+              return <BusinessCard key={bus._id} id={bus._id} name={bus.name} image={bus.image ?? ""} distance={`${distance}`} isOpen={bus.isOpen} />
+            })
+          }
+        </div>:<p className="text-center text-gray-500">No Business Found</p>
+      }
+    </div>
   )
 
 }

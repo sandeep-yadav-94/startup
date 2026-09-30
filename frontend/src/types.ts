@@ -26,6 +26,10 @@ export interface AppContextType {
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   setIsAuth: React.Dispatch<React.SetStateAction<boolean>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  cart : ICart[] | null;
+  fetchCart: ()=>Promise<void>;
+  subTotal: number;
+  quantity: number;
 }
 
 export interface IBusiness{
@@ -57,4 +61,13 @@ export interface IServiceList {
     isAvailable : boolean;
     createdAt : Date;
     updatedAt : Date;
+}
+
+export interface ICart {
+    userId: string;
+    businessId:string | IBusiness;
+    serviceId:string | IServiceList;
+    quantity:number;
+    createdAt:Date;
+    updatedAt:Date;
 }

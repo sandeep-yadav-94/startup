@@ -243,6 +243,25 @@ export const getNearbyBusiness = TryCatch(async(req, res) => {
             }
         }
     ])
+    res.json({
+        success:true,
+        count : businesses.length,
+        businesses,
+    })
+})
+
+
+
+export const fetchSingleBusiness = TryCatch(async(req,res)=>{
+    const businessId = req.params.id;
+    if(typeof businessId !== "string" || !/^[0-9a-fA-F]{24}$/.test(businessId)){
+        return res.status(400).json({message:"Invalid business ID"});
+    }
+    const b = await business.findById(businessId);
+    if(!b){
+        return res.status(404).json({message:"Business not found"});
+    }
+    res.json(b);
 })
 
 
