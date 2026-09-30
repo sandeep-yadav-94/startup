@@ -24,16 +24,11 @@ const requestLocation = (
         const { latitude, longitude } = position.coords;
 
         try {
-            const response = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18`,
-                { headers: { Accept: "application/json" } },
-            );
+            const { data } = await axios.get(`${businessService}/api/address/reverse`, {
+                params: { lat: latitude, lng: longitude },
+            });
 
-            if (!response.ok) {
-                throw new Error(`Reverse geocoding failed: ${response.status}`);
-            }
-
-            const data: {
+            const geocodedData: {
                 display_name?: string;
                 address?: {
                     city?: string;
@@ -42,16 +37,16 @@ const requestLocation = (
                     state_district?: string;
                     county?: string;
                 };
-            } = await response.json();
+            } = data;
 
             const nextLocation = {
                 latitude,
                 longitude,
-                formattedAddress: data.display_name || "Current location",
+                formattedAddress: geocodedData.display_name || "Current location",
             };
             setLocation(nextLocation);
 
-            const address = data.address ?? {};
+            const address = geocodedData.address ?? {};
             setCity(
                 address.city ||
                 address.municipality ||

@@ -2,6 +2,7 @@ import express from "express";
 import connectDB from "./config/db.js";
 import businessRoutes from "./routes/business.js"
 import serviceRoutes from "./routes/servicelist.js"
+import addressRoutes from './routes/address.js'
 import cartRoutes from './routes/cart.js'
 import dotenv from "dotenv";
 import cors from "cors"
@@ -17,6 +18,8 @@ const PORT = process.env.PORT || 5001;
 app.use("/api/business", businessRoutes);
 app.use("/api/service", serviceRoutes);
 app.use("/api/cart", cartRoutes);
+app.use("/api/address", addressRoutes);
+
 
 
 app.listen(PORT, ()=>{
