@@ -40,7 +40,14 @@ export const reverseGeocode = TryCatch(async (req, res) => {
         }
 
         const { data } = await axios.get("https://nominatim.openstreetmap.org/reverse", {
-            params: { format: "jsonv2", lat: latitude, lon: longitude, zoom: 18 },
+            params: {
+                format: "jsonv2",
+                lat: latitude,
+                lon: longitude,
+                zoom: 18,
+                addressdetails: 1,
+                namedetails: 1,
+            },
             headers: {
                 Accept: "application/json",
                 "User-Agent": "StartupApp/1.0 (reverse geocoding)",

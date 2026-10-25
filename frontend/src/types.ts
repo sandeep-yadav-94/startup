@@ -71,3 +71,39 @@ export interface ICart {
     createdAt:Date;
     updatedAt:Date;
 }
+
+
+export interface IOrder {
+    _id:string;
+    userId:string;
+    businessId:string;
+    businessName:string;
+    riderId?: string | null;
+    riderPhone: number | null;
+    riderName: string | null;
+    distance: number;
+    riderAmount: number;
+    services:{
+        serviceId:string;
+        name:string;
+        price:string;
+        quantity:string;
+    }[];
+    subtotal:number;
+    deliveryFee:number;
+    platformFee:number;
+    totalAmount:number;
+    addressId:string;
+    deliveryAddress:{
+        formattedAddress:string;
+        mobile:string;
+        latitude:number;
+        longitude:number;
+    };
+    status: | "placed" | "accepted" | "preparing" | "wait for rider" | "rider_assigned" | "picked_up" | "reached" | "canceled";
+    paymentMethod:"razorpay";
+    paymentStatus:"pending" | "paid" | "failed";
+    expiresAt: Date;
+    createdAt : Date;
+    updatedAt: Date;
+}

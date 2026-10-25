@@ -4,9 +4,15 @@ import businessRoutes from "./routes/business.js"
 import serviceRoutes from "./routes/servicelist.js"
 import addressRoutes from './routes/address.js'
 import cartRoutes from './routes/cart.js'
+import orderRoutes from './routes/order.js'
 import dotenv from "dotenv";
 import cors from "cors"
+import { connectRabbitMQ } from "./config/rabbitmq.js";
+import { startPaymentConsumer } from "./config/payment.consumer.js";
 dotenv.config();
+
+await connectRabbitMQ();
+startPaymentConsumer();
 
 const app = express();
 
@@ -19,6 +25,7 @@ app.use("/api/business", businessRoutes);
 app.use("/api/service", serviceRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/address", addressRoutes);
+app.use("/api/order", orderRoutes);
 
 
 

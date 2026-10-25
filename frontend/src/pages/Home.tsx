@@ -26,14 +26,15 @@ const Home = () => {
 
 
   const fetchBusinesses = async()=>{
-    if(!location?.latitude || !location?.longitude){
-      // alert("You need to give your location permission to continue");
+    if(!location) {
+      setLoading(false);
+      return;
     }
     try {
       setLoading(true);
       const {data} = await axios.get(`${businessService}/api/business/all`, {params:{
-        latitude:location?.latitude,
-        longitude:location?.longitude,
+        latitude:location.latitude,
+        longitude:location.longitude,
         search,
       },
       headers:{

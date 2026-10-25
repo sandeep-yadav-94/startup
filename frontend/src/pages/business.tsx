@@ -6,6 +6,7 @@ import BusinessProfile from "../components/BusinessProfile";
 import ServiceList from "../components/ServiceList";
 import AddServiceList from "../components/AddServiceList";
 import type { IBusiness, IServiceList } from "../types";
+import BusinessOrders from "../components/BusinessOrders";
 
 type MerchantTab = "services" | "add-service" | "bookings"
 
@@ -73,6 +74,9 @@ const business = () => {
   }
 
   return <div className="min-h-screen bg-gray-50 px-4 py-6 space-y-6"><BusinessProfile business={business}onUpdate={setBusiness} isMerchant={true}/>
+
+  <BusinessOrders businessId={business._id} />
+
   <div className="rounded-xl bg-white shadow-sm">
     <div className="flex border-b">
       {

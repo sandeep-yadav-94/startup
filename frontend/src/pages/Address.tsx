@@ -29,6 +29,32 @@ _id: string;
 formattedAddress: string;
 mobile: number;
 }
+
+interface ReverseGeocodeResult {
+display_name?: string;
+name?: string;
+address?: Record<string, string | undefined>;
+}
+
+const formatReverseGeocodeAddress = (result: ReverseGeocodeResult) => {
+const address = result.address || {};
+const parts = [
+result.name,
+address.house_number,
+address.road || address.pedestrian || address.footway || address.residential,
+address.neighbourhood || address.quarter || address.suburb,
+address.city || address.town || address.village || address.municipality,
+address.state_district || address.county,
+address.state,
+address.postcode,
+].filter((part): part is string => Boolean(part?.trim()));
+const uniqueParts = parts.filter(
+(part, index) => parts.findIndex((candidate) => candidate.toLowerCase() === part.toLowerCase()) === index,
+);
+
+return uniqueParts.join(", ") || result.display_name || "";
+};
+
 // 📍 Click-to-select location
 const LocationPicker = ({
 setLocation,
@@ -84,25 +110,39 @@ const [deletingId, setDeletingId] = useState<string | null>(null);
 // 📋 Form state
 const [mobile, setMobile] = useState("");
 const [formattedAddress, setFormattedAddress] = useState("");
+const [addressDetails, setAddressDetails] = useState("");
+const [isFetchingAddress, setIsFetchingAddress] = useState(false);
 const [latitude, setLatitude] = useState<number | null>(null);
 const [longitude, setLongitude] = useState<number | null>(null);
 const reverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+const reverseGeocodeRequest = useRef(0);
 // 🌍 Reverse geocoding
-const fetchFormattedAddress = async (lat: number, lng: number) => {
+const fetchFormattedAddress = async (lat: number, lng: number, requestId: number) => {
 try {
-const { data } = await axios.get(`${businessService}/api/address/reverse`, {
+const { data } = await axios.get<ReverseGeocodeResult>(`${businessService}/api/address/reverse`, {
 params: { lat, lng },
 });
-setFormattedAddress(data.display_name || "");
+if (requestId === reverseGeocodeRequest.current) {
+setFormattedAddress(formatReverseGeocodeAddress(data));
+}
 } catch {
+if (requestId === reverseGeocodeRequest.current) {
 toast.error("Failed to fetch address");
+}
+} finally {
+if (requestId === reverseGeocodeRequest.current) {
+setIsFetchingAddress(false);
+}
 }
 };
 const setLocation = (lat: number, lng: number) => {
 setLatitude(lat);
 setLongitude(lng);
+setFormattedAddress("");
+setIsFetchingAddress(true);
+const requestId = ++reverseGeocodeRequest.current;
 if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current);
-reverseGeocodeTimer.current = setTimeout(() => fetchFormattedAddress(lat, lng), 700);
+reverseGeocodeTimer.current = setTimeout(() => fetchFormattedAddress(lat, lng, requestId), 700);
 };
 // 📡 Fetch addresses
 const fetchAddresses = async () => {
@@ -124,15 +164,22 @@ setLoading(false);
 useEffect(() => {
 fetchAddresses();
 }, []);
+useEffect(() => () => {
+if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current);
+reverseGeocodeRequest.current += 1;
+}, []);
 // ➕ Add address
 const addAddress = async () => {
+const savedAddress = [addressDetails.trim(), formattedAddress].filter(Boolean).join(", ");
 if (
 !mobile ||
-!formattedAddress ||
+!addressDetails.trim() ||
+!savedAddress ||
+isFetchingAddress ||
 latitude === null ||
 longitude === null
 ) {
-toast.error("Please select location on map");
+toast.error("Add your flat, house, street, or a nearby landmark for accurate delivery");
 return;
 }
 try {
@@ -140,7 +187,7 @@ setAdding(true);
 await axios.post(
 `${businessService}/api/address/new`,
 {
-formattedAddress,
+formattedAddress: savedAddress,
 mobile,
 latitude,
 longitude,
@@ -154,6 +201,7 @@ Authorization: `Bearer ${localStorage.getItem("token")}`,
 toast.success("Address added");
 setMobile("");
 setFormattedAddress("");
+setAddressDetails("");
 
 setLatitude(null);
 setLongitude(null);
@@ -209,9 +257,20 @@ longitude]} />}
 {/* 📍 Selected address */}
 {formattedAddress && (
 <div className="rounded-lg border bg-green-50 p-3 text-sm">
-📍 {formattedAddress}
+📍 {[addressDetails.trim(), formattedAddress].filter(Boolean).join(", ")}
 </div>
 )}
+{isFetchingAddress && (
+<p className="text-sm text-gray-500">Finding street and nearby place details...</p>
+)}
+<input
+type="text"
+placeholder="Flat / house / street / nearby landmark"
+value={addressDetails}
+onChange={(e) => setAddressDetails(e.target.value)}
+required
+className="w-full rounded-lg border px-4 py-2"
+/>
 {/* 📱 Mobile */}
 <input
 type="number"
@@ -222,7 +281,7 @@ className="w-full rounded-lg border px-4 py-2"
 />
 {/* ➕ Save */}
 <button
-disabled={adding}
+disabled={adding || isFetchingAddress}
 onClick={addAddress}
 className="flex items-center justify-center gap-2 rounded-lg
 

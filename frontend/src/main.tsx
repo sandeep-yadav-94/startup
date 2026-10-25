@@ -5,12 +5,18 @@ import App from './App.tsx'
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AppProvider } from './context/AppContext.tsx';
 import "leaflet/dist/leaflet.css"
+import { SocketProvider } from './context/SocketContext.tsx';
+
+export const utilsService =  "http://localhost:5002";
+export const realtimeService = "http://localhost:5004";
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <GoogleOAuthProvider clientId="893773152488-fsdd1q9cotb5atkss56hniin75g3jrcv.apps.googleusercontent.com">
       <AppProvider>
-         <App />
+        <SocketProvider>
+          <App />
+        </SocketProvider>
       </AppProvider>
     </GoogleOAuthProvider>
   </StrictMode>,
