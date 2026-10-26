@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post("/new", isAuth, createOrder);
 router.get("/payment/:orderId", fetchOrderForPayment);
-router.get("/order/:businessId", isAuth, isMerchant, fetchBusinessOrders);
+router.get("/all/:businessId", isAuth, isMerchant, fetchBusinessOrders);
 router.put("/:orderId", isAuth, isMerchant, updateOrderStatus);
 router.get("/my", isAuth, getMyOrders);
 router.get("/:id", isAuth, fetchSingleOrder);

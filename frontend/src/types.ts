@@ -100,7 +100,7 @@ export interface IOrder {
         latitude:number;
         longitude:number;
     };
-    status: | "placed" | "accepted" | "preparing" | "wait for rider" | "rider_assigned" | "picked_up" | "reached" | "canceled";
+    status: | "placed" | "accepted" | "preparing" | "ready_for_rider" | "wait for rider" | "rider_assigned" | "picked_up" | "reached" | "canceled";
     paymentMethod:"razorpay";
     paymentStatus:"pending" | "paid" | "failed";
     expiresAt: Date;

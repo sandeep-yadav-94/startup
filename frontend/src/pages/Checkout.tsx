@@ -93,7 +93,10 @@ const Checkout = () => {
       });
       return data;
     } catch (error) {
-      toast.error("Error creating order. Please try again.");
+      const message = axios.isAxiosError<{ message?: string }>(error)
+        ? error.response?.data?.message
+        : undefined;
+      toast.error(message || "Error creating order. Please try again.");
       console.error('Error creating order:', error);
     } finally {
       setCreatingOrder(false);

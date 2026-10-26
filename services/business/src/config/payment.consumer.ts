@@ -21,7 +21,7 @@ export const startPaymentConsumer = async () => {
         { _id: orderId, paymentStatus: { $ne: "paid" } },
         {
           $set: { paymentStatus: "paid", status: "placed" },
-          $unset: { expireAt: 1 }
+          $unset: { expiresAt: 1 }
         },
         { new: true }
       );
@@ -34,7 +34,7 @@ export const startPaymentConsumer = async () => {
 
       //socket io ka code yaha pe likhna hai
       await axios.post(`${process.env.REALTIME_SERVICE}/api/v1/internal/emit`, {
-        event: "new order",
+        event: "order:new",
         room: `business:${order.businessId}`,
         payload: {
           orderId: order._id.toString(),
