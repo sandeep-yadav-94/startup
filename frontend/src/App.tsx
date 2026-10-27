@@ -14,6 +14,8 @@ import Cart from "./pages/Cart";
 import Address from "./pages/Address";
 import Checkout from "./pages/Checkout";
 import PaymentSuccess from "./pages/PaymentSuccess";
+import Orders from "./pages/Orders";
+import OrderPage from "./pages/OrderPage";
 
 const App = () => {
 
@@ -39,6 +41,8 @@ const App = () => {
           </Route>
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Home />} />
+            <Route path="/orders" element={<Orders />} />
+             <Route path="/orders/:id" element={<OrderPage />} />
              <Route path="/address" element={<Address />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/payment-success/:paymentId" element={<PaymentSuccess />} />
