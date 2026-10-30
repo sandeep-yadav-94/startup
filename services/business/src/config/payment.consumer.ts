@@ -1,5 +1,6 @@
 import axios from 'axios';
 import Order from '../models/Order.js';
+import Business from '../models/business.js';
 import {getChannel} from './rabbitmq.js'
 
 export const startPaymentConsumer = async () => {
@@ -32,10 +33,15 @@ export const startPaymentConsumer = async () => {
       }
       console.log(`Order updated successfully for ID: ${orderId}`);
 
+      const business = await Business.findById(order.businessId).select("ownerId");
+      if (!business) {
+        throw new Error(`Business not found for order ${order._id}`);
+      }
+
       //socket io ka code yaha pe likhna hai
       await axios.post(`${process.env.REALTIME_SERVICE}/api/v1/internal/emit`, {
         event: "order:new",
-        room: `business:${order.businessId}`,
+        room: business.ownerId.toString(),
         payload: {
           orderId: order._id.toString(),
         }

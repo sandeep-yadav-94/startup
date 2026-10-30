@@ -11,7 +11,7 @@ router.put("/edit", isAuth, isMerchant, editBusiness);
 router.put("/location", isAuth, isMerchant, updateBusinessLocation);
 router.put("/status", isAuth, isMerchant, updateBusinessStatus);
 router.get("/all", isAuth, getNearbyBusiness);
-router.get("/:id", isAuth, fetchSingleBusiness);
+router.get("/:id", isAuth, fetchSingleBusiness); 
 
 
 export default router;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { IOrder } from "../types"
 import { ORDER_ACTIONS } from "../utils/orderflow";
 import axios from "axios";
@@ -21,6 +21,8 @@ const statusColors = (status: string) => {
       return "bg-green-100 text-green-800 ";
     case "ready_for_rider":
       return "bg-indigo-100 text-indigo-800";
+    case "reached":
+      return "bg-blue-100 text-blue-800";
     case "picked_up":
       return "bg-purple-100 text-purple-800";
     case "delivered":
@@ -34,20 +36,43 @@ const OrderCart = ({ order, onStatusUpdate }: props) => {
 
   const [loading, setLoading] = useState(false);
 
+  const [ retryVisible, setRetryVisible] = useState(false)
+  const [retryCycle, setRetryCycle] = useState(0);
+
   const actions = ORDER_ACTIONS[order.status] || [];
+
+  useEffect(()=>{
+
+    if(order.status !== "ready_for_rider"){
+      return;
+    }
+
+    const timer = setTimeout(()=>{
+      setRetryVisible(true)
+    }, 10000)
+
+    return ()=> clearTimeout(timer);
+
+  }, [order.status, retryCycle]);
 
   const updateStatus = async (status: string) => {
 
     try {
       setLoading(true);
+      setRetryVisible(false);
       await axios.put(`${businessService}/api/order/${order._id}`, { status }, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       });
       toast.success(`Order status updated to ${status}`);
+      if (status === "ready_for_rider") {
+        setRetryCycle((cycle) => cycle + 1);
+      }
       onStatusUpdate?.();
-    } catch (error) {
+    } catch (error: unknown) {
+      console.error("Failed to update order status:", error);
+      setRetryVisible(order.status === "ready_for_rider");
       setLoading(false);
       toast.error("Failed to update order status");
     }finally {
@@ -88,6 +113,12 @@ const OrderCart = ({ order, onStatusUpdate }: props) => {
             ))}
           </div>
         )
+      }
+
+      {
+        order.status === "ready_for_rider" && retryVisible && <div className="pt-2">
+          <button className="w-full rounded-lg border-[#e23744] py-2 text-xs font-semibold text-[#e23744] hover:bg-red-50 disabled:opacity-50" onClick={()=>updateStatus("ready_for_rider")} disabled={loading}>Retry ready for rider</button>
+        </div>
       }
 
     </div>

@@ -76,10 +76,13 @@ export interface ICart {
 export interface IOrder {
     _id:string;
     userId:string;
+    customerName?: string;
     businessId:string;
     businessName:string;
+    businessAddress?: string;
     riderId?: string | null;
-    riderPhone: number | null;
+    riderUserId?: string | null;
+    riderPhone: string | null;
     riderName: string | null;
     distance: number;
     riderAmount: number;
@@ -100,7 +103,7 @@ export interface IOrder {
         latitude:number;
         longitude:number;
     };
-    status: | "placed" | "accepted" | "preparing" | "ready_for_rider" | "wait for rider" | "rider_assigned" | "picked_up" | "reached" | "canceled";
+    status: "placed" | "accepted" | "preparing" | "ready_for_rider" | "wait for rider" | "rider_assigned" | "picked_up" | "reached" | "delivered" | "canceled";
     paymentMethod:"razorpay";
     paymentStatus:"pending" | "paid" | "failed";
     expiresAt: Date;

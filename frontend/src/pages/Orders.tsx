@@ -5,7 +5,7 @@ import { useSocket } from "../context/SocketContext";
 import axios from "axios";
 import { businessService } from "../config";
 
-const ACTIVE_STATUSES = ["placed", "accepted", "preparing", "ready_for_rider", "rider_assigned", "picked_up"]
+const ACTIVE_STATUSES = ["placed", "accepted", "preparing", "ready_for_rider", "rider_assigned", "reached", "picked_up"]
 
 const Orders = () => {
 
@@ -46,6 +46,17 @@ const Orders = () => {
       socket.off("order_update", onOrderUpdate);
     }
   }, [socket]);
+
+  useEffect(()=>{
+  if(!socket) return;
+  const onUpdateOrder = () => {
+    fetchOrders();
+  }
+  socket.on("order:rider_assigned", onUpdateOrder);
+  return ()=>{
+    socket.off("order:rider_assigned", onUpdateOrder);
+    }
+}, [socket]);
 
   if(loading){
     return (

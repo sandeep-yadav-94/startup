@@ -2,10 +2,12 @@ import mongoose, {Schema, Document} from "mongoose";
 
 export interface IOrder extends Document {
     userId:string;
+    customerName?: string;
     businessId:string;
     businessName:string;
     riderId?: string | null;
-    riderPhone: number | null;
+    riderUserId?: string | null;
+    riderPhone: string | null;
     riderName: string | null;
     distance: number;
     riderAmount: number;
@@ -26,7 +28,7 @@ export interface IOrder extends Document {
         latitude:number;
         longitude:number;
     };
-    status: | "placed" | "accepted" | "preparing" | "ready_for_rider" | "wait for rider" | "rider_assigned" | "picked_up" | "reached" | "canceled";
+    status: "placed" | "accepted" | "preparing" | "ready_for_rider" | "wait for rider" | "rider_assigned" | "picked_up" | "reached" | "delivered" | "canceled";
     paymentMethod:"razorpay";
     paymentStatus:"pending" | "paid" | "failed";
     expiresAt: Date;
@@ -41,6 +43,11 @@ const OrderSchema = new Schema<IOrder>(
         userId:{
             type:String,
             required:true,
+        },
+
+        customerName:{
+            type:String,
+            default:"Customer",
         },
 
         businessId:{
@@ -58,8 +65,13 @@ const OrderSchema = new Schema<IOrder>(
             default:null,
         },
 
+        riderUserId:{
+            type:String,
+            default:null,
+        },
+
         riderPhone:{
-            type:Number,
+            type:String,
             default:null,
         },
 
@@ -154,6 +166,7 @@ const OrderSchema = new Schema<IOrder>(
                 "rider_assigned",
                 "picked_up",
                 "reached",
+                "delivered",
                 "canceled"
             ],
             default:"placed",

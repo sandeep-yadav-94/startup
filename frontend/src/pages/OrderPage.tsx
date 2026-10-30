@@ -67,6 +67,17 @@ const OrderPage = () => {
     };
   }, [socket, id, fetchOrder]);
 
+  useEffect(()=>{
+  if(!socket) return;
+  const onUpdateOrder = () => {
+    void fetchOrder();
+  }
+  socket.on("order:rider_assigned", onUpdateOrder);
+  return ()=>{
+    socket.off("order:rider_assigned", onUpdateOrder);
+    }
+}, [socket]);
+
   if (loading) {
     return (
       <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
@@ -114,7 +125,7 @@ const OrderPage = () => {
 
   const status = order.status === "wait for rider" ? "Waiting for rider" : formatLabel(order.status);
   const paymentStatus = formatLabel(order.paymentStatus);
-  const statusIsComplete = ["paid", "delivered", "reached"].includes(order.status);
+  const statusIsComplete = ["paid", "delivered"].includes(order.status);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-7 sm:px-6 sm:py-10">

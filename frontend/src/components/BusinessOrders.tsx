@@ -6,7 +6,7 @@ import axios from "axios";
 import { businessService } from "../config";
 import OrderCart from "./OrderCart";
 
-const ACTIVE_STATUSES = ["placed", "accepted", "preparing", "ready_for_rider", "rider_assigned", "picked_up"];
+const ACTIVE_STATUSES = ["placed", "accepted", "preparing", "ready_for_rider", "rider_assigned", "reached", "picked_up"];
 
 const BusinessOrders = ({businessId}: {businessId: string}) => {
 
@@ -76,6 +76,19 @@ useEffect(() => {
     socket.off("order:new", onNewOrder);
   };
 }, [socket, audioUnlocked]);
+
+useEffect(()=>{
+  if(!socket) return;
+  const onUpdateOrder = () => {
+    fetchOrders();
+  }
+  socket.on("order:rider_assigned", onUpdateOrder);
+  socket.on("order_update", onUpdateOrder);
+  return ()=>{
+    socket.off("order:rider_assigned", onUpdateOrder);
+    socket.off("order_update", onUpdateOrder);
+    }
+}, [socket]);
 
 if (loading) {
   return <p className="text-center text-gray-500">Loading orders...</p>;
@@ -147,4 +160,3 @@ return (
 };
 
 export default BusinessOrders;
-
