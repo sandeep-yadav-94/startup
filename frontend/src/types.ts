@@ -80,6 +80,10 @@ export interface IOrder {
     businessId:string;
     businessName:string;
     businessAddress?: string;
+    businessLocation?: {
+        latitude: number;
+        longitude: number;
+    } | null;
     riderId?: string | null;
     riderUserId?: string | null;
     riderPhone: string | null;

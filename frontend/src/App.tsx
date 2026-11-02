@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import { Toaster } from "react-hot-toast";
@@ -17,7 +17,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import Orders from "./pages/Orders";
 import OrderPage from "./pages/OrderPage";
 import RiderDashboard from "./pages/RiderDashboard";
-import { h1 } from "framer-motion/client";
+import AdminDashboard from "./pages/AdminDashboard";
 
 const App = () => {
 
@@ -25,6 +25,18 @@ const App = () => {
 
   if(loading){
     return <h1 className="text-2xl font-bold text-red-500 text-center mt-56">Loading...</h1>
+  }
+
+  if(user?.role === "admin"){
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </Routes>
+        <Toaster />
+      </BrowserRouter>
+    );
   }
 
   if(user && user.role === "merchant"){

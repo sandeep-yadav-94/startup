@@ -4,8 +4,14 @@ import { AuthenticatedRequest } from "../middlewares/isAuth.js";
 import TryCatch from "../middlewares/trycatch.js";
 import { Rider } from "../model/Rider.js";
 
+interface CurrentRiderOrder {
+  _id: string;
+  userId: string;
+  riderUserId?: string | null;
+}
+
 const getCurrentOrderForRider = async (riderId: string) => {
-  const { data } = await axios.get<{ order: unknown | null }>(
+  const { data } = await axios.get<{ order: CurrentRiderOrder | null }>(
     `${process.env.BUSINESS_SERVICE}/api/order/current/rider`,
     {
       params: { riderId },
@@ -14,6 +20,63 @@ const getCurrentOrderForRider = async (riderId: string) => {
   );
   return data.order ?? null;
 };
+
+export const publishRiderLocation = TryCatch(async (req: AuthenticatedRequest, res) => {
+  const riderUser = req.user;
+  const { orderId } = req.params;
+  const { latitude, longitude } = req.body;
+
+  if (!riderUser || riderUser.role !== "rider") {
+    return res.status(403).json({ message: "Only riders can share their location" });
+  }
+
+  if (
+    typeof orderId !== "string" ||
+    !/^[0-9a-fA-F]{24}$/.test(orderId) ||
+    typeof latitude !== "number" ||
+    !Number.isFinite(latitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    typeof longitude !== "number" ||
+    !Number.isFinite(longitude) ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return res.status(400).json({ message: "A valid order and location are required" });
+  }
+
+  const rider = await Rider.findOne({ userId: riderUser._id });
+  if (!rider) {
+    return res.status(404).json({ message: "Rider profile not found" });
+  }
+
+  const currentOrder = await getCurrentOrderForRider(rider._id.toString());
+  if (
+    !currentOrder ||
+    currentOrder._id !== orderId ||
+    currentOrder.riderUserId !== riderUser._id
+  ) {
+    return res.status(403).json({ message: "This order is not assigned to you" });
+  }
+
+  try {
+    await axios.post(
+      `${process.env.REALTIME_SERVICE}/api/v1/internal/emit`,
+      {
+        event: "rider:location",
+        room: currentOrder.userId,
+        payload: { orderId, latitude, longitude },
+      },
+      {
+        headers: { "x-internal-key": process.env.INTERNAL_SERVICE_KEY },
+      },
+    );
+    return res.json({ message: "Rider location shared" });
+  } catch (error) {
+    console.error("Failed to broadcast rider location:", error);
+    return res.status(502).json({ message: "Could not share rider location" });
+  }
+});
 
 export const addRiderProfile = TryCatch(async(req:AuthenticatedRequest, res) => {
 

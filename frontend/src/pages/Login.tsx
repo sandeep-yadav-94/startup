@@ -35,8 +35,17 @@ const login = () => {
             setLoading(false);
             navigate("/");
         } catch (error) {
-            console.log(error);
-            toast.error("Failed to login");
+            console.error("Login request failed:", error);
+            const message = axios.isAxiosError<{ message?: string }>(error)
+                ? error.response?.data?.message
+                : undefined;
+            toast.error(
+                message === "invalid_client"
+                    ? "Google rejected the OAuth client credentials. Check the auth service Google client ID and secret."
+                    : typeof message === "string"
+                        ? message
+                        : "Login failed. Please try again.",
+            );
         } finally {
             setLoading(false);
         }

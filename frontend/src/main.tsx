@@ -13,7 +13,7 @@ export const riderService = "http://localhost:5005";
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <GoogleOAuthProvider clientId="893773152488-fsdd1q9cotb5atkss56hniin75g3jrcv.apps.googleusercontent.com">
+    <GoogleOAuthProvider clientId="893773152488-4jd8ff53aps35rbd4r34o0g0sg9d0na5.apps.googleusercontent.com">
       <AppProvider>
         <SocketProvider>
           <App />

@@ -405,8 +405,16 @@ export const fetchSingleOrder = TryCatch(async(req:AuthenticatedRequest, res)=>{
         })
     }
 
+    const orderBusiness = await business.findById(order.businessId).select("autoLocation");
+    const businessCoordinates = orderBusiness?.autoLocation?.coordinates;
     res.json({
-        order
+        order: {
+            ...order.toObject(),
+            businessAddress: orderBusiness?.autoLocation?.formattedAddress || "Business address unavailable",
+            businessLocation: businessCoordinates?.length === 2
+                ? { latitude: businessCoordinates[1], longitude: businessCoordinates[0] }
+                : null,
+        },
     })
 
 })
@@ -514,11 +522,15 @@ export const getCurrentOrdersForRider = TryCatch(async(req, res) => {
     }
 
     const orderBusiness = await business.findById(order.businessId).select("autoLocation");
+    const businessCoordinates = orderBusiness?.autoLocation?.coordinates;
     res.json({
         order: {
             ...order.toObject(),
             customerName: order.customerName || "Customer",
             businessAddress: orderBusiness?.autoLocation?.formattedAddress || "Business address unavailable",
+            businessLocation: businessCoordinates?.length === 2
+                ? { latitude: businessCoordinates[1], longitude: businessCoordinates[0] }
+                : null,
         },
     });
 

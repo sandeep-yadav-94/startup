@@ -5,6 +5,7 @@ import axios from "axios";
 import { businessService } from "../config";
 import { useSocket } from "../context/SocketContext";
 import type { IOrder } from "../types";
+import RiderOrderMap from "../components/RiderOrderMap";
 
 const formatCurrency = (amount: number | string) =>
   new Intl.NumberFormat("en-IN", {
@@ -164,6 +165,12 @@ const OrderPage = () => {
           <span className="truncate font-semibold text-gray-800">{order.businessName}</span>
         </div>
       </header>
+
+      {["rider_assigned", "reached", "picked_up"].includes(order.status) && (
+        <div className="mt-5">
+          <RiderOrderMap order={order} viewer="customer" />
+        </div>
+      )}
 
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-[1.45fr_1fr]">
         <div className="space-y-5">

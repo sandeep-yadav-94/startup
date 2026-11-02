@@ -4,6 +4,7 @@ import TryCatch from "../middlewares/trycatch.js";
 import { AuthenticatedRequest } from "../middlewares/isAuth.js";
 import { oauth2client } from "../config/googleConfig.js";
 import axios from "axios";
+import { isAdminEmail } from "../config/admin.js";
 
 export const loginUser = TryCatch(async (req, res) => {
 
@@ -32,6 +33,14 @@ export const loginUser = TryCatch(async (req, res) => {
             image: picture,    
         });
     }
+    const shouldBeAdmin = isAdminEmail(email);
+    if (shouldBeAdmin && user.role !== "admin") {
+        user.role = "admin";
+        await user.save();
+    } else if (!shouldBeAdmin && user.role === "admin") {
+        user.role = "customer";
+        await user.save();
+    }
     const token = jwt.sign({user}, process.env.JWT_SECRET as string, {
         expiresIn: "15d",
     });
@@ -57,6 +66,10 @@ export const addUserRole = TryCatch(async (req: AuthenticatedRequest, res) => {
 
     if(!allowedRoles.includes(role)){
         res.status(400).json({ message: "Invalid role"});
+        return;
+    }
+    if (role === "admin" && !isAdminEmail(req.user.email)) {
+        res.status(403).json({ message: "Admin access is restricted" });
         return;
     }
 
