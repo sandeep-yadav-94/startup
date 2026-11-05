@@ -16,7 +16,8 @@ const connectDB = async () => {
         });
         console.log("MongoDB connected");
     } catch (error) {
-        console.log(error);
+        console.error("MongoDB connection failed for rider service:", error);
+        throw error;
     }
 }
 

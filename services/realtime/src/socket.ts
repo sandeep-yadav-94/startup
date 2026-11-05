@@ -39,6 +39,7 @@ export const initSocket = (server: http.Server) => {
       socket.data.user = {
         id: userId,
         businessId: typeof user.businessId === "string" ? user.businessId : undefined,
+        role: typeof user.role === "string" ? user.role : undefined,
       };
       next();
     } catch (error) {
@@ -53,6 +54,9 @@ export const initSocket = (server: http.Server) => {
     }
     const userId = user.id;
     socket.join(userId);
+    if (user.role === "rider") {
+      socket.join("riders");
+    }
     if (user.businessId) {
       socket.join(`business:${user.businessId}`);
     }

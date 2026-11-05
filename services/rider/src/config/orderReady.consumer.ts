@@ -27,7 +27,8 @@ export const startOrderReadyConsumer = async() => {
       const riders = await Rider.find({
           isAvailble: true,
           isVerified: true,
-          location: {
+        isBusy: { $ne: true },
+        location: {
             $near: {
               $geometry: location,
               $maxDistance: 500,

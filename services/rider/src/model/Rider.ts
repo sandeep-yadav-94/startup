@@ -4,15 +4,23 @@ export interface IRider extends Document {
 
   userId : string;
   picture : string;
+  riderType : "bike" | "bicycle" | "walking";
   phoneNumber : string;
   addharNumber : string;
-  drivingLicenseNumber : string;
+  drivingLicenseNumber? : string;
+  idProofFront : string;
+  idProofBack : string;
+  accountNumber : string;
+  ifscCode : string;
+  upiId? : string;
+  upiQrCode? : string;
   isVerified : boolean;
   location : {
     type : "Point";
     coordinates : [number, number];
   };
   isAvailble : boolean;
+  isBusy : boolean;
   lastActiveAt : Date;
   createdAt :Date;
   updatedAt : Date;
@@ -31,6 +39,12 @@ const schema = new Schema<IRider>(
       type : String,
       required : true,
     },
+    riderType : {
+      type : String,
+      enum : ["bike", "bicycle", "walking"],
+      required : true,
+      default : "bike",
+    },
     phoneNumber : {
       type : String,
       required : true,
@@ -43,7 +57,31 @@ const schema = new Schema<IRider>(
     },
     drivingLicenseNumber : {
       type : String,
+      required : function (this: IRider) {
+        return this.riderType === "bike";
+      },
+    },
+    idProofFront : {
+      type : String,
       required : true,
+    },
+    idProofBack : {
+      type : String,
+      required : true,
+    },
+    accountNumber : {
+      type : String,
+      required : true,
+    },
+    ifscCode : {
+      type : String,
+      required : true,
+    },
+    upiId : {
+      type : String,
+    },
+    upiQrCode : {
+      type : String,
     },
     isVerified : {
       type : Boolean,
@@ -61,6 +99,10 @@ const schema = new Schema<IRider>(
       },
     },
     isAvailble : {
+      type : Boolean,
+      default : false,
+    },
+    isBusy : {
       type : Boolean,
       default : false,
     },

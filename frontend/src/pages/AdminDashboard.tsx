@@ -54,6 +54,7 @@ interface RiderReview {
   aadhaarNumber: string;
   drivingLicenseNumber: string;
   isAvailble: boolean;
+  isBusy?: boolean;
   isVerified: boolean;
   createdAt: string;
   user?: { name: string; email: string };
@@ -454,7 +455,7 @@ const AdminDashboard = () => {
                           </div>
                           <div className="mt-4 grid gap-2 text-sm text-[#62594F] sm:grid-cols-2">
                             <p><span className="font-semibold text-[#403931]">Phone</span> · {rider.phoneNumber}</p>
-                            <p><span className="font-semibold text-[#403931]">Availability</span> · {rider.isAvailble ? "Online" : "Offline"}</p>
+                            <p><span className="font-semibold text-[#403931]">Availability</span> · {rider.isBusy ? "Busy" : rider.isAvailble ? "Online" : "Offline"}</p>
                             <p><span className="font-semibold text-[#403931]">Aadhaar</span> · {revealed ? rider.aadhaarNumber : maskNumber(rider.aadhaarNumber)}</p>
                             <p><span className="font-semibold text-[#403931]">Driving licence</span> · {revealed ? rider.drivingLicenseNumber : maskNumber(rider.drivingLicenseNumber)}</p>
                           </div>

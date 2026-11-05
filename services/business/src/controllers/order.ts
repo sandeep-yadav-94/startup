@@ -485,6 +485,23 @@ export const assignRiderToOrder = TryCatch(async(req, res) => {
         orderId: orderUpdated._id.toString(),
     };
     await emitOrderEvent(orderUpdated, "order:rider_assigned", orderPayload);
+    try {
+        await axios.post(
+            `${process.env.REALTIME_SERVICE}/api/v1/internal/emit`,
+            {
+                event: "order:claimed",
+                room: "riders",
+                payload: { orderId: orderUpdated._id.toString() },
+            },
+            {
+                headers: {
+                    "x-internal-key": process.env.INTERNAL_SERVICE_KEY,
+                },
+            },
+        );
+    } catch (error) {
+        console.error(`Failed to invalidate competing rider requests for order ${orderUpdated._id}:`, error);
+    }
 
     res.json({
         message : "Rider assigned successfully...",
@@ -547,31 +564,45 @@ export const updateOrderStatusRider = TryCatch(async(req,res)=> {
         })
     }
 
-    const { orderId, riderId } = req.body;
-    if (typeof orderId !== "string" || typeof riderId !== "string") {
-        return res.status(400).json({ message: "Order and rider ids are required" });
+    const { orderId, riderId, expectedStatus } = req.body;
+    if (
+        typeof orderId !== "string" ||
+        typeof riderId !== "string" ||
+        typeof expectedStatus !== "string"
+    ) {
+        return res.status(400).json({ message: "Order, rider, and current status are required" });
     }
 
     const order = await Order.findOne({ _id: orderId, riderId });
     if (!order) {
         return res.status(404).json({ message: "Assigned order not found" });
     }
+    if (order.status !== expectedStatus) {
+        return res.status(409).json({ message: "Order status has changed. Refresh the delivery before continuing." });
+    }
 
     const nextStatus =
-        order.status === "rider_assigned"
+        expectedStatus === "rider_assigned"
             ? "reached"
-            : order.status === "reached"
+            : expectedStatus === "reached"
                 ? "picked_up"
-                : order.status === "picked_up"
+                : expectedStatus === "picked_up"
                     ? "delivered"
                     : null;
     if (!nextStatus) {
         return res.status(409).json({ message: "Order cannot be advanced from its current status" });
     }
 
+    const transitionTime = new Date();
+    const transitionTimestamp =
+        nextStatus === "reached"
+            ? { reachedAt: transitionTime }
+            : nextStatus === "picked_up"
+                ? { pickedUpAt: transitionTime }
+                : { deliveredAt: transitionTime };
     const updatedOrder = await Order.findOneAndUpdate(
-        { _id: orderId, riderId, status: order.status },
-        { $set: { status: nextStatus } },
+        { _id: orderId, riderId, status: expectedStatus },
+        { $set: { status: nextStatus, ...transitionTimestamp } },
         { new: true, runValidators: true },
     );
     if (!updatedOrder) {

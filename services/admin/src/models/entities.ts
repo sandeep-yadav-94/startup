@@ -21,6 +21,7 @@ export interface IRider extends Document {
   drivingLicenseNumber: string;
   isVerified: boolean;
   isAvailble: boolean;
+  isBusy?: boolean;
   createdAt: Date;
 }
 

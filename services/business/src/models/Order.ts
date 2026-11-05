@@ -29,6 +29,9 @@ export interface IOrder extends Document {
         longitude:number;
     };
     status: "placed" | "accepted" | "preparing" | "ready_for_rider" | "wait for rider" | "rider_assigned" | "picked_up" | "reached" | "delivered" | "canceled";
+    reachedAt?: Date | null;
+    pickedUpAt?: Date | null;
+    deliveredAt?: Date | null;
     paymentMethod:"razorpay";
     paymentStatus:"pending" | "paid" | "failed";
     expiresAt: Date;
@@ -170,6 +173,21 @@ const OrderSchema = new Schema<IOrder>(
                 "canceled"
             ],
             default:"placed",
+        },
+
+        reachedAt:{
+            type:Date,
+            default:null,
+        },
+
+        pickedUpAt:{
+            type:Date,
+            default:null,
+        },
+
+        deliveredAt:{
+            type:Date,
+            default:null,
         },
 
         paymentMethod:{

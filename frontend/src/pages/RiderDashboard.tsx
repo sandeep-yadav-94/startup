@@ -36,11 +36,19 @@ import RiderOrderMap from "../components/RiderOrderMap";
 export interface IRider {
 
   _id : string;
+  riderType : "bike" | "bicycle" | "walking";
   phoneNumber : string;
   addharNumber : string;
-  drivingLicenseNumber : string;
+  drivingLicenseNumber?: string;
+  idProofFront: string;
+  idProofBack: string;
+  accountNumber: string;
+  ifscCode: string;
+  upiId?: string;
+  upiQrCode?: string;
   isVerified : boolean;
   isAvailble : boolean;
+  isBusy?: boolean;
   picture : string;
 
 }
@@ -54,6 +62,7 @@ const RiderDashboard = () => {
   const [profile, setProfile] = useState<IRider | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [locationTrackingError, setLocationTrackingError] = useState<string | null>(null);
 
   const [incomingOrders, setIncomingOrders] = useState<string[]>([]);
   const [currentOrder, setCurrentOrder] = useState<IOrder | null>(null);
@@ -100,15 +109,21 @@ useEffect(()=>{
       setIncomingOrders((prev)=>prev.filter((id) => id!==orderId));
     }, 10000);
   }
+  const onOrderClaimed = ({orderId}: {orderId: string}) => {
+    incomingOrderIds.current.delete(orderId);
+    setIncomingOrders((orders) => orders.filter((id) => id !== orderId));
+  };
   socket.on("order:available", onOrderAvailable);
+  socket.on("order:claimed", onOrderClaimed);
   return ()=>{
     socket.off("order:available", onOrderAvailable);
+    socket.off("order:claimed", onOrderClaimed);
   }
 }, [socket, audioUnlocked])
 
-  const fetchProfile = useCallback(async () => {
+  const fetchProfile = useCallback(async (showLoading = true) => {
   try {
-    setLoading(true);
+    if (showLoading) setLoading(true);
 
     const { data } = await axios.get<{ rider: IRider | null }>(
       `${riderService}/api/rider/myprofile`,
@@ -124,14 +139,14 @@ useEffect(()=>{
     console.error("Failed to fetch rider profile:", error);
     setProfile(null);
   } finally {
-    setLoading(false);
+    if (showLoading) setLoading(false);
   }
 }, []);
 
 
 useEffect(()=>{
   if(user?.role === "rider"){
-    void Promise.resolve().then(fetchProfile);
+    void Promise.resolve().then(() => fetchProfile());
   }
 }, [user?.role, fetchProfile]);
 
@@ -146,7 +161,6 @@ const fetchCurrentOrder = useCallback(async() => {
     setCurrentOrder(data.order);
   } catch (error) {
     console.log(error);
-    setCurrentOrder(null);
   }
 }, []);
 
@@ -155,17 +169,72 @@ useEffect(()=>{
 }, [user?.role, fetchCurrentOrder]);
 
 useEffect(() => {
+  if (!profile?.isAvailble || profile.isBusy || currentOrder) {
+    setLocationTrackingError(null);
+    return;
+  }
+  if (!navigator.geolocation) {
+    queueMicrotask(() => {
+      setLocationTrackingError("Location access is not supported by this browser.");
+    });
+    return;
+  }
+
+  let isTracking = true;
+  const watchId = navigator.geolocation.watchPosition(
+    ({ coords }) => {
+      if (!isTracking) return;
+      if (
+        !Number.isFinite(coords.latitude) ||
+        coords.latitude < -90 ||
+        coords.latitude > 90 ||
+        !Number.isFinite(coords.longitude) ||
+        coords.longitude < -180 ||
+        coords.longitude > 180
+      ) {
+        setLocationTrackingError("Your browser returned an invalid location.");
+        return;
+      }
+
+      void axios.patch(
+        `${riderService}/api/rider/location`,
+        { latitude: coords.latitude, longitude: coords.longitude },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } },
+      ).then(() => {
+        if (isTracking) setLocationTrackingError(null);
+      }).catch((error: unknown) => {
+        if (!isTracking) return;
+        if (axios.isAxiosError(error) && error.response?.status === 409) return;
+        console.error("Failed to update online rider location:", error);
+        setLocationTrackingError("Could not sync location for nearby requests. Live order tracking is unaffected.");
+      });
+    },
+    (error) => {
+      if (!isTracking) return;
+      console.error("Could not track online rider location:", error);
+      setLocationTrackingError("Location access is required to receive nearby delivery requests.");
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
+  );
+  return () => {
+    isTracking = false;
+    navigator.geolocation.clearWatch(watchId);
+  };
+}, [currentOrder, profile?.isAvailble, profile?.isBusy]);
+
+useEffect(() => {
   if (!socket) return;
 
   const onOrderAssigned = (order: IOrder) => {
     setCurrentOrder(order);
     setIncomingOrders([]);
     incomingOrderIds.current.clear();
-    void fetchProfile();
+    void fetchProfile(false);
     void fetchCurrentOrder();
   };
   const onOrderUpdated = () => {
     void fetchCurrentOrder();
+    void fetchProfile(false);
   };
   const onSocketConnected = () => {
     void fetchCurrentOrder();
@@ -189,7 +258,7 @@ const updateCurrentOrder = async () => {
   try {
     const { data } = await axios.put(
       `${riderService}/api/rider/order/update/${currentOrder._id}`,
-      {},
+      { expectedStatus: currentOrder.status },
       {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -197,7 +266,7 @@ const updateCurrentOrder = async () => {
       },
     );
     toast.success(data.message);
-    await fetchCurrentOrder();
+    await Promise.all([fetchCurrentOrder(), fetchProfile(false)]);
   } catch (error: unknown) {
     const message = axios.isAxiosError(error)
       ? error.response?.data?.message
@@ -214,7 +283,7 @@ const removeIncomingOrder = (orderId: string) => {
 
 const resolveIncomingOrder = (orderId: string) => {
   removeIncomingOrder(orderId);
-  void fetchProfile();
+  void fetchProfile(false);
   void fetchCurrentOrder();
 };
 
@@ -235,6 +304,7 @@ const toggleAvailibility = async() => {
           Authorization :  `Bearer ${localStorage.getItem("token")}`,
         }
       })
+      setLocationTrackingError(null);
       toast.success(profile?.isAvailble ? "You are offline now" : "You are Online now");
       fetchProfile();
     } catch (error: unknown) {
@@ -255,8 +325,15 @@ const toggleAvailibility = async() => {
 
 const [phoneNumber, setPhoneNumber] = useState("");
 const [addharNumber, setAddharNumber] = useState("");
+const [riderType, setRiderType] = useState<"bike" | "bicycle" | "walking">("bike");
 const [drivingLicenseNumber, setDrivingLicenseNumber] = useState("");
 const [image, setImage] = useState<File | null>(null);
+const [idProofFront, setIdProofFront] = useState<File | null>(null);
+const [idProofBack, setIdProofBack] = useState<File | null>(null);
+const [accountNumber, setAccountNumber] = useState("");
+const [ifscCode, setIfscCode] = useState("");
+const [upiId, setUpiId] = useState("");
+const [upiQrCode, setUpiQrCode] = useState<File | null>(null);
 const [submitting, setSubmitting] = useState(false);
 
 
@@ -272,8 +349,31 @@ const handleSubmit = async() => {
     return;
   }
 
-  if (image.size > 5 * 1024 * 1024) {
-    toast.error("Rider image must be 5 MB or smaller");
+  if (riderType === "bike" && !drivingLicenseNumber.trim()) {
+    toast.error("Driving license number is required for bike riders");
+    return;
+  }
+
+  if (!idProofFront || !idProofBack) {
+    toast.error("Please upload both front and back photos of your ID proof");
+    return;
+  }
+
+  if (!accountNumber.trim() || !ifscCode.trim()) {
+    toast.error("Please enter your bank account number and IFSC code");
+    return;
+  }
+
+  if (!upiId.trim() && !upiQrCode) {
+    toast.error("Please provide a UPI ID or upload your UPI QR code");
+    return;
+  }
+
+  const registrationImages = [image, idProofFront, idProofBack, upiQrCode].filter(
+    (file): file is File => file !== null,
+  );
+  if (registrationImages.some((file) => file.size > 5 * 1024 * 1024)) {
+    toast.error("Each uploaded image must be 5 MB or smaller");
     return;
   }
 
@@ -284,10 +384,17 @@ const handleSubmit = async() => {
 
     formData.append("phoneNumber", phoneNumber);
     formData.append("addharNumber", addharNumber);
-    formData.append("drivingLicenseNumber", drivingLicenseNumber);
+    formData.append("riderType", riderType);
+    if (riderType === "bike") formData.append("drivingLicenseNumber", drivingLicenseNumber.trim());
+    formData.append("accountNumber", accountNumber.trim());
+    formData.append("ifscCode", ifscCode.trim().toUpperCase());
+    if (upiId.trim()) formData.append("upiId", upiId.trim());
     formData.append("latitude", pos.coords.latitude.toString());
     formData.append("longitude", pos.coords.longitude.toString());
     formData.append("file", image);
+    formData.append("idProofFront", idProofFront);
+    formData.append("idProofBack", idProofBack);
+    if (upiQrCode) formData.append("upiQrCode", upiQrCode);
 
     try {
       const {data} = await axios.post(`${riderService}/api/rider/new`, formData, {
@@ -488,19 +595,140 @@ if (!profile) {
                 </div>
 
                 <div>
-                  <label htmlFor="drivingLicenseNumber" className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35443B]">
-                    <FiFileText className="text-[#557A69]" />
-                    Driving license number
+                  <label htmlFor="riderType" className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35443B]">
+                    <FiTruck className="text-[#557A69]" />
+                    Delivery mode
                   </label>
-                  <input
-                    id="drivingLicenseNumber"
-                    type="text"
-                    value={drivingLicenseNumber}
-                    onChange={(event) => setDrivingLicenseNumber(event.target.value)}
+                  <select
+                    id="riderType"
+                    value={riderType}
+                    onChange={(event) => setRiderType(event.target.value as "bike" | "bicycle" | "walking")}
                     required
                     className="min-h-12 w-full rounded-xl border border-[#DFE6DF] bg-[#F8FAF7] px-4 text-sm text-[#26352F] outline-none transition focus:border-[#648B6D] focus:bg-white focus:ring-4 focus:ring-[#648B6D]/10"
-                    placeholder="Enter driving license number"
-                  />
+                  >
+                    <option value="bike">Bike</option>
+                    <option value="bicycle">Bicycle</option>
+                    <option value="walking">Walking</option>
+                  </select>
+                </div>
+
+                {riderType === "bike" && (
+                  <div>
+                    <label htmlFor="drivingLicenseNumber" className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35443B]">
+                      <FiFileText className="text-[#557A69]" />
+                      Driving license number
+                    </label>
+                    <input
+                      id="drivingLicenseNumber"
+                      type="text"
+                      value={drivingLicenseNumber}
+                      onChange={(event) => setDrivingLicenseNumber(event.target.value)}
+                      required
+                      className="min-h-12 w-full rounded-xl border border-[#DFE6DF] bg-[#F8FAF7] px-4 text-sm text-[#26352F] outline-none transition focus:border-[#648B6D] focus:bg-white focus:ring-4 focus:ring-[#648B6D]/10"
+                      placeholder="Enter driving license number"
+                    />
+                  </div>
+                )}
+
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="idProofFront" className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35443B]">
+                      <FiFileText className="text-[#557A69]" />
+                      ID proof · front photo
+                    </label>
+                    <input
+                      id="idProofFront"
+                      type="file"
+                      accept="image/*"
+                      required
+                      onChange={(event) => setIdProofFront(event.target.files?.[0] ?? null)}
+                      className="w-full text-sm text-[#52655C] file:mr-3 file:rounded-lg file:border-0 file:bg-[#E5F0E7] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#456653]"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="idProofBack" className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35443B]">
+                      <FiFileText className="text-[#557A69]" />
+                      ID proof · back photo
+                    </label>
+                    <input
+                      id="idProofBack"
+                      type="file"
+                      accept="image/*"
+                      required
+                      onChange={(event) => setIdProofBack(event.target.files?.[0] ?? null)}
+                      className="w-full text-sm text-[#52655C] file:mr-3 file:rounded-lg file:border-0 file:bg-[#E5F0E7] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#456653]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="accountNumber" className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35443B]">
+                      <FiDollarSign className="text-[#557A69]" />
+                      Bank account number
+                    </label>
+                    <input
+                      id="accountNumber"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={accountNumber}
+                      onChange={(event) => setAccountNumber(event.target.value)}
+                      required
+                      className="min-h-12 w-full rounded-xl border border-[#DFE6DF] bg-[#F8FAF7] px-4 text-sm text-[#26352F] outline-none transition focus:border-[#648B6D] focus:bg-white focus:ring-4 focus:ring-[#648B6D]/10"
+                      placeholder="Enter account number"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="ifscCode" className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35443B]">
+                      <FiFileText className="text-[#557A69]" />
+                      IFSC code
+                    </label>
+                    <input
+                      id="ifscCode"
+                      type="text"
+                      autoComplete="off"
+                      value={ifscCode}
+                      onChange={(event) => setIfscCode(event.target.value)}
+                      required
+                      className="min-h-12 w-full rounded-xl border border-[#DFE6DF] bg-[#F8FAF7] px-4 text-sm uppercase text-[#26352F] outline-none transition focus:border-[#648B6D] focus:bg-white focus:ring-4 focus:ring-[#648B6D]/10"
+                      placeholder="e.g. HDFC0001234"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="upiId" className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35443B]">
+                      <FiDollarSign className="text-[#557A69]" />
+                      UPI ID
+                    </label>
+                    <input
+                      id="upiId"
+                      type="text"
+                      autoComplete="off"
+                      value={upiId}
+                      onChange={(event) => setUpiId(event.target.value)}
+                      required={!upiQrCode}
+                      className="min-h-12 w-full rounded-xl border border-[#DFE6DF] bg-[#F8FAF7] px-4 text-sm text-[#26352F] outline-none transition focus:border-[#648B6D] focus:bg-white focus:ring-4 focus:ring-[#648B6D]/10"
+                      placeholder="name@bank"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="upiQrCode" className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#35443B]">
+                      <FiFileText className="text-[#557A69]" />
+                      UPI QR code
+                    </label>
+                    <input
+                      id="upiQrCode"
+                      type="file"
+                      accept="image/*"
+                      required={!upiId.trim()}
+                      onChange={(event) => setUpiQrCode(event.target.files?.[0] ?? null)}
+                      className="w-full text-sm text-[#52655C] file:mr-3 file:rounded-lg file:border-0 file:bg-[#E5F0E7] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#456653]"
+                    />
+                    <p className="mt-1 text-xs text-[#8B8177]">Provide UPI ID, QR code, or both.</p>
+                  </div>
                 </div>
 
                 <div>
@@ -571,9 +799,9 @@ if (!profile) {
             <FiShield className="text-[#557A69]" />
             Partner account
           </span>
-          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold sm:hidden ${profile.isAvailble ? "bg-emerald-50 text-emerald-700" : "bg-[#ECEFEC] text-[#6D7972]"}`}>
-            <span className={`h-2 w-2 rounded-full ${profile.isAvailble ? "animate-pulse bg-emerald-500" : "bg-[#9AA49E]"}`} />
-            {profile.isAvailble ? "Online" : "Offline"}
+          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold sm:hidden ${profile.isBusy || currentOrder ? "bg-amber-50 text-amber-700" : profile.isAvailble ? "bg-emerald-50 text-emerald-700" : "bg-[#ECEFEC] text-[#6D7972]"}`}>
+            <span className={`h-2 w-2 rounded-full ${profile.isBusy || currentOrder ? "bg-amber-500" : profile.isAvailble ? "animate-pulse bg-emerald-500" : "bg-[#9AA49E]"}`} />
+            {profile.isBusy || currentOrder ? "On delivery" : profile.isAvailble ? "Online" : "Offline"}
           </span>
         </header>
 
@@ -615,9 +843,9 @@ if (!profile) {
                       {profile.isVerified ? <FiCheckCircle /> : <FiClock />}
                       {profile.isVerified ? "Verified partner" : "Verification pending"}
                     </span>
-                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${profile.isAvailble ? "bg-emerald-300/15 text-emerald-100" : "bg-white/10 text-white/70"}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${profile.isAvailble ? "animate-pulse bg-emerald-300" : "bg-white/45"}`} />
-                      {profile.isAvailble ? "Available for orders" : "Currently offline"}
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${profile.isBusy || currentOrder ? "bg-amber-200/15 text-amber-100" : profile.isAvailble ? "bg-emerald-300/15 text-emerald-100" : "bg-white/10 text-white/70"}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${profile.isBusy || currentOrder ? "bg-amber-300" : profile.isAvailble ? "animate-pulse bg-emerald-300" : "bg-white/45"}`} />
+                      {profile.isBusy || currentOrder ? "Busy on delivery" : profile.isAvailble ? "Available for orders" : "Currently offline"}
                     </span>
                   </div>
                 </div>
@@ -638,6 +866,11 @@ if (!profile) {
                 </button>
               )}
             </div>
+            {locationTrackingError && (
+              <p role="alert" className="relative mt-4 rounded-xl border border-red-100 bg-red-50/10 px-4 py-3 text-sm text-red-100">
+                {locationTrackingError}
+              </p>
+            )}
             {!profile.isVerified && (
               <div className="relative mt-6 flex items-start gap-3 rounded-2xl border border-amber-100/15 bg-amber-100/[0.08] p-4 text-sm text-amber-50/90">
                 <FiLock className="mt-0.5 shrink-0 text-amber-200" />
@@ -650,7 +883,7 @@ if (!profile) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#8A968E]">Rider readiness</p>
-                <h2 className="mt-2 text-xl font-semibold text-[#2D3C34]">{profile.isAvailble ? "You’re on the map" : "Ready when you are"}</h2>
+                <h2 className="mt-2 text-xl font-semibold text-[#2D3C34]">{profile.isBusy || currentOrder ? "Delivery in progress" : profile.isAvailble ? "You’re on the map" : "Ready when you are"}</h2>
               </div>
               <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EDF4EE] text-xl text-[#557A69]"><FiCompass /></span>
             </div>
@@ -667,7 +900,7 @@ if (!profile) {
               ) : (
                 <div className="flex items-center gap-3 rounded-xl bg-[#F7F9F6] px-3.5 py-3">
                   <FiCheck className="shrink-0 text-[#64816F]" />
-                  <p className="text-xs text-[#748178]">{profile.isAvailble ? "You can receive new delivery requests." : "Go online when you’re ready to accept deliveries."}</p>
+                  <p className="text-xs text-[#748178]">{profile.isBusy || currentOrder ? "New requests are paused until this delivery is complete." : profile.isAvailble ? "You can receive new delivery requests." : "Go online when you’re ready to accept deliveries."}</p>
                 </div>
               )}
             </div>
@@ -675,7 +908,7 @@ if (!profile) {
         </section>
 
         <section className="mt-4 grid gap-3 sm:grid-cols-3">
-          <RiderSummaryCard icon={<FiActivity />} label="Availability" value={profile.isAvailble ? "Online" : "Offline"} detail={profile.isAvailble ? "Receiving nearby requests" : "Not receiving requests"} active={profile.isAvailble} />
+          <RiderSummaryCard icon={<FiActivity />} label="Availability" value={profile.isBusy || currentOrder ? "Busy" : profile.isAvailble ? "Online" : "Offline"} detail={profile.isBusy || currentOrder ? "Not receiving requests during delivery" : profile.isAvailble ? "Receiving nearby requests" : "Not receiving requests"} active={profile.isAvailble} />
           <RiderSummaryCard icon={<FiShield />} label="Partner status" value={profile.isVerified ? "Verified" : "In review"} detail={profile.isVerified ? "Profile is approved" : "Awaiting profile review"} active={profile.isVerified} />
           <RiderSummaryCard icon={<FiPackage />} label="Active delivery" value={currentOrder ? `#${currentOrder._id.slice(-6)}` : "No active order"} detail={currentOrder ? currentOrder.status.replaceAll("_", " ") : "Your next delivery starts here"} active={Boolean(currentOrder)} />
         </section>
@@ -700,7 +933,7 @@ if (!profile) {
           </motion.section>
         )}
 
-        {profile.isAvailble && incomingOrders.length > 0 && (
+        {profile.isAvailble && !profile.isBusy && !currentOrder && incomingOrders.length > 0 && (
           <section className="mt-7">
             <div className="mb-3 flex items-end justify-between gap-3">
               <div>
@@ -754,8 +987,12 @@ if (!profile) {
                   <div className="flex gap-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FBF2E9] text-[#AF713C]"><FiMapPin /></span>
                     <div className="min-w-0 pt-0.5">
-                      <p className="text-[11px] font-bold uppercase tracking-wide text-[#939D96]">Business destination</p>
-                      <p className="mt-1 text-sm leading-5 text-[#536159]">{currentOrder.businessAddress || "Business address unavailable"}</p>
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-[#939D96]">{currentOrder.status === "picked_up" ? "Customer destination" : "Pickup location"}</p>
+                      <p className="mt-1 text-sm leading-5 text-[#536159]">
+                        {currentOrder.status === "picked_up"
+                          ? currentOrder.deliveryAddress.formattedAddress || "Customer address unavailable"
+                          : currentOrder.businessAddress || "Business address unavailable"}
+                      </p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3 rounded-2xl bg-[#F5F8F4] p-4">

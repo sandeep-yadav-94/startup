@@ -10,6 +10,28 @@ interface CurrentRiderOrder {
   riderUserId?: string | null;
 }
 
+const riderTypes = ["bike", "bicycle", "walking"] as const;
+type RiderType = (typeof riderTypes)[number];
+
+const isRiderType = (value: unknown): value is RiderType =>
+  riderTypes.some((riderType) => riderType === value);
+
+const uploadImage = async (file: Express.Multer.File): Promise<string> => {
+  const fileBuffer = getBuffer(file);
+  if (!fileBuffer?.content) {
+    throw new Error("Failed to generate image buffer");
+  }
+
+  const { data } = await axios.post<{ url?: unknown }>(
+    `${process.env.UTILS_SERVICE}/api/upload`,
+    { buffer: fileBuffer.content },
+  );
+  if (typeof data?.url !== "string" || !data.url) {
+    throw new Error("Image upload service did not return an image URL");
+  }
+  return data.url;
+};
+
 const getCurrentOrderForRider = async (riderId: string) => {
   const { data } = await axios.get<{ order: CurrentRiderOrder | null }>(
     `${process.env.BUSINESS_SERVICE}/api/order/current/rider`,
@@ -59,6 +81,13 @@ export const publishRiderLocation = TryCatch(async (req: AuthenticatedRequest, r
     return res.status(403).json({ message: "This order is not assigned to you" });
   }
 
+  rider.location = {
+    type: "Point",
+    coordinates: [longitude, latitude],
+  };
+  rider.lastActiveAt = new Date();
+  await rider.save();
+
   try {
     await axios.post(
       `${process.env.REALTIME_SERVICE}/api/v1/internal/emit`,
@@ -78,6 +107,60 @@ export const publishRiderLocation = TryCatch(async (req: AuthenticatedRequest, r
   }
 });
 
+export const updateRiderLocation = TryCatch(async (req: AuthenticatedRequest, res) => {
+  const user = req.user;
+  const { latitude, longitude } = req.body;
+
+  if (!user || user.role !== "rider") {
+    return res.status(403).json({ message: "Only riders can update their location" });
+  }
+
+  if (
+    (typeof latitude !== "number" && typeof latitude !== "string") ||
+    (typeof longitude !== "number" && typeof longitude !== "string") ||
+    String(latitude).trim() === "" ||
+    String(longitude).trim() === ""
+  ) {
+    return res.status(400).json({ message: "Please provide a valid rider location" });
+  }
+  const latitudeNumber = Number(latitude);
+  const longitudeNumber = Number(longitude);
+  if (
+    !Number.isFinite(latitudeNumber) ||
+    latitudeNumber < -90 ||
+    latitudeNumber > 90 ||
+    !Number.isFinite(longitudeNumber) ||
+    longitudeNumber < -180 ||
+    longitudeNumber > 180
+  ) {
+    return res.status(400).json({ message: "Please provide a valid rider location" });
+  }
+
+  const rider = await Rider.findOneAndUpdate(
+    {
+      userId: user._id,
+      isAvailble: true,
+      isBusy: { $ne: true },
+      isVerified: true,
+    },
+    {
+      $set: {
+        location: {
+          type: "Point",
+          coordinates: [longitudeNumber, latitudeNumber],
+        },
+        lastActiveAt: new Date(),
+      },
+    },
+    { new: true },
+  );
+  if (!rider) {
+    return res.status(409).json({ message: "Rider is not available for location updates" });
+  }
+
+  return res.json({ message: "Rider location updated" });
+});
+
 export const addRiderProfile = TryCatch(async(req:AuthenticatedRequest, res) => {
 
   const user = req.user;
@@ -93,13 +176,31 @@ export const addRiderProfile = TryCatch(async(req:AuthenticatedRequest, res) => 
     })
   }
 
-  const {phoneNumber, addharNumber, drivingLicenseNumber, latitude, longitude} = req.body;
+  const {
+    phoneNumber,
+    addharNumber,
+    riderType,
+    drivingLicenseNumber,
+    accountNumber,
+    ifscCode,
+    upiId,
+    latitude,
+    longitude,
+  } = req.body as Record<string, unknown>;
   const latitudeNumber = Number(latitude);
   const longitudeNumber = Number(longitude);
   if (
-    !phoneNumber ||
-    !addharNumber ||
-    !drivingLicenseNumber ||
+    typeof phoneNumber !== "string" ||
+    !phoneNumber.trim() ||
+    typeof addharNumber !== "string" ||
+    !addharNumber.trim() ||
+    !isRiderType(riderType) ||
+    (riderType === "bike" &&
+      (typeof drivingLicenseNumber !== "string" || !drivingLicenseNumber.trim())) ||
+    typeof accountNumber !== "string" ||
+    !accountNumber.trim() ||
+    typeof ifscCode !== "string" ||
+    !ifscCode.trim() ||
     !Number.isFinite(latitudeNumber) ||
     latitudeNumber < -90 ||
     latitudeNumber > 90 ||
@@ -112,11 +213,26 @@ export const addRiderProfile = TryCatch(async(req:AuthenticatedRequest, res) => 
     });
   }
 
-  const file = req.file;
-  if(!file){
+  const uploadedFiles = req.files;
+  const getUploadedFile = (fieldName: string): Express.Multer.File | undefined => {
+    if (!uploadedFiles || Array.isArray(uploadedFiles)) return undefined;
+    return uploadedFiles[fieldName]?.[0];
+  };
+  const pictureFile = getUploadedFile("file");
+  const idProofFrontFile = getUploadedFile("idProofFront");
+  const idProofBackFile = getUploadedFile("idProofBack");
+  const upiQrCodeFile = getUploadedFile("upiQrCode");
+  const normalizedUpiId = typeof upiId === "string" ? upiId.trim() : "";
+
+  if (!pictureFile || !idProofFrontFile || !idProofBackFile) {
     return res.status(400).json({
-      message: "Rider image is required",
-    })
+      message: "Rider photo and both front and back ID proof photos are required",
+    });
+  }
+  if (!normalizedUpiId && !upiQrCodeFile) {
+    return res.status(400).json({
+      message: "Please provide a UPI ID or upload a UPI QR code",
+    });
   }
 
   const existingRider = await Rider.findOne({
@@ -131,39 +247,39 @@ export const addRiderProfile = TryCatch(async(req:AuthenticatedRequest, res) => 
     });
   }
 
-  const fileBuffer = getBuffer(file);
-  if(!fileBuffer?.content){
-    return res.status(500).json({
-      message: "Failed to generate image buffer",
-    })
-  }
-
-  let imageUrl: unknown;
+  let pictureUrl: string;
+  let idProofFrontUrl: string;
+  let idProofBackUrl: string;
+  let upiQrCodeUrl: string | undefined;
   try {
-    const { data } = await axios.post<{ url?: unknown }>(
-      `${process.env.UTILS_SERVICE}/api/upload`,
-      { buffer: fileBuffer.content },
-    );
-    imageUrl = data?.url;
+    [pictureUrl, idProofFrontUrl, idProofBackUrl, upiQrCodeUrl] = await Promise.all([
+      uploadImage(pictureFile),
+      uploadImage(idProofFrontFile),
+      uploadImage(idProofBackFile),
+      upiQrCodeFile ? uploadImage(upiQrCodeFile) : Promise.resolve(undefined),
+    ]);
   } catch (error) {
     const message = axios.isAxiosError(error)
       ? error.response?.data?.message || "Image upload service is unavailable"
-      : "Image upload failed";
+      : error instanceof Error ? error.message : "Image upload failed";
     return res.status(502).json({ message });
-  }
-
-  if (typeof imageUrl !== "string" || !imageUrl) {
-    return res.status(502).json({
-      message: "Image upload service did not return an image URL",
-    });
   }
 
   const rider = await Rider.create({
     userId: user._id,
-    picture: imageUrl,
-    phoneNumber,
-    addharNumber,
-    drivingLicenseNumber,
+    picture: pictureUrl,
+    riderType,
+    phoneNumber: phoneNumber.trim(),
+    addharNumber: addharNumber.trim(),
+    ...(riderType === "bike" && typeof drivingLicenseNumber === "string"
+      ? { drivingLicenseNumber: drivingLicenseNumber.trim() }
+      : {}),
+    idProofFront: idProofFrontUrl,
+    idProofBack: idProofBackUrl,
+    accountNumber: accountNumber.trim(),
+    ifscCode: ifscCode.trim().toUpperCase(),
+    ...(normalizedUpiId ? { upiId: normalizedUpiId } : {}),
+    ...(upiQrCodeUrl ? { upiQrCode: upiQrCodeUrl } : {}),
     location: {
       type: "Point",
       coordinates: [longitudeNumber, latitudeNumber],
@@ -263,6 +379,17 @@ export const toggleRiderAvailability = TryCatch(
       })
     }
 
+    if (
+      (typeof latitude !== "number" && typeof latitude !== "string") ||
+      (typeof longitude !== "number" && typeof longitude !== "string") ||
+      String(latitude).trim() === "" ||
+      String(longitude).trim() === ""
+    ) {
+      return res.status(400).json({
+        message: "Please provide a valid rider location",
+      });
+    }
+
     const latitudeNumber = Number(latitude);
     const longitudeNumber = Number(longitude);
     if (
@@ -309,7 +436,7 @@ export const toggleRiderAvailability = TryCatch(
       try {
         if (await getCurrentOrderForRider(rider._id.toString())) {
           await Rider.updateOne(
-            { _id: rider._id, isAvailble: true },
+            { _id: rider._id, isAvailble: true, isBusy: { $ne: true } },
             { $set: { isAvailble: false } },
           );
           return res.status(409).json({
@@ -318,7 +445,7 @@ export const toggleRiderAvailability = TryCatch(
         }
       } catch (error) {
         await Rider.updateOne(
-          { _id: rider._id, isAvailble: true },
+          { _id: rider._id, isAvailble: true, isBusy: { $ne: true } },
           { $set: { isAvailble: false } },
         );
         console.error("Could not verify active orders after rider availability update:", error);
@@ -344,6 +471,9 @@ export const acceptOrder = TryCatch(async(req:AuthenticatedRequest, res) => {
   const riderUser = req.user;
   const riderUserId = riderUser?._id;
   const {orderId} = req.params;
+  if (typeof orderId !== "string" || !/^[0-9a-fA-F]{24}$/.test(orderId)) {
+    return res.status(400).json({ message: "A valid order id is required" });
+  }
   if(!riderUserId){
     return res.status(400).json({
       message : "Please login",
@@ -354,8 +484,13 @@ export const acceptOrder = TryCatch(async(req:AuthenticatedRequest, res) => {
   }
 
   const rider = await Rider.findOneAndUpdate(
-    { userId: riderUserId, isAvailble: true, isVerified: true },
-    { $set: { isAvailble: false } },
+    {
+      userId: riderUserId,
+      isAvailble: true,
+      isVerified: true,
+      isBusy: { $ne: true },
+    },
+    { $set: { isBusy: true } },
     { new: true },
   );
   if(!rider){
@@ -382,8 +517,8 @@ export const acceptOrder = TryCatch(async(req:AuthenticatedRequest, res) => {
       try {
         if (!(await getCurrentOrderForRider(rider._id.toString()))) {
           await Rider.updateOne(
-            { _id: rider._id, isAvailble: false },
-            { $set: { isAvailble: true } },
+            { _id: rider._id, isBusy: true },
+            { $set: { isBusy: false } },
           );
         }
       } catch (availabilityError) {
@@ -396,6 +531,16 @@ export const acceptOrder = TryCatch(async(req:AuthenticatedRequest, res) => {
     }
 
     console.error("Order acceptance could not be confirmed:", error);
+    try {
+      if (!(await getCurrentOrderForRider(rider._id.toString()))) {
+        await Rider.updateOne(
+          { _id: rider._id, isBusy: true },
+          { $set: { isBusy: false } },
+        );
+      }
+    } catch (availabilityError) {
+      console.error("Could not verify rider availability after uncertain order acceptance:", availabilityError);
+    }
     return res.status(502).json({
       message: "Could not confirm order acceptance. Refresh your current order before trying again.",
     });
@@ -463,16 +608,37 @@ export const acceptOrder = TryCatch(async(req:AuthenticatedRequest, res) => {
   }
 
   const {orderId} = req.params;
+  if (typeof orderId !== "string" || !/^[0-9a-fA-F]{24}$/.test(orderId)) {
+    return res.status(400).json({ message: "A valid order id is required" });
+  }
+  const { expectedStatus } = req.body as { expectedStatus?: unknown };
+  if (!["rider_assigned", "reached", "picked_up"].includes(String(expectedStatus))) {
+    return res.status(400).json({ message: "A valid current order status is required" });
+  }
 
   try {
     const {data} = await axios.put(`${process.env.BUSINESS_SERVICE}/api/order/update/status/rider`, {
       orderId,
       riderId: rider._id.toString(),
+      expectedStatus,
     }, {
       headers : {
         "x-internal-key" : process.env.INTERNAL_SERVICE_KEY,
       }
     })
+    if (data.order?.status === "delivered") {
+      try {
+        await Rider.updateOne(
+          { _id: rider._id, isBusy: true },
+          { $set: { isBusy: false } },
+        );
+      } catch (error) {
+        console.error("Delivery completed but rider busy status could not be cleared:", error);
+        return res.status(502).json({
+          message: "Delivery completed, but availability could not be refreshed. Please refresh your dashboard.",
+        });
+      }
+    }
     res.json({
       message: data.message,
       order: data.order,

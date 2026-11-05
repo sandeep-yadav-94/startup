@@ -90,20 +90,32 @@ const FitRouteBounds = ({ locations }: { locations: [number, number][] }) => {
   return null;
 };
 
+const isValidCoordinate = (latitude: number, longitude: number) =>
+  Number.isFinite(latitude) &&
+  latitude >= -90 &&
+  latitude <= 90 &&
+  Number.isFinite(longitude) &&
+  longitude >= -180 &&
+  longitude <= 180;
+
 const RiderOrderMap = ({ order, viewer = "rider" }: Props) => {
   const { socket } = useSocket();
   const [riderLocation, setRiderLocation] = useState<[number, number] | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const customerLocation = useMemo<[number, number]>(
-    () => [order.deliveryAddress.latitude, order.deliveryAddress.longitude],
-    [order.deliveryAddress.latitude, order.deliveryAddress.longitude],
-  );
+  const customerLocation = useMemo<[number, number] | null>(() => {
+    const latitude = order.deliveryAddress?.latitude;
+    const longitude = order.deliveryAddress?.longitude;
+    return typeof latitude === "number" &&
+      typeof longitude === "number" &&
+      isValidCoordinate(latitude, longitude)
+      ? [latitude, longitude]
+      : null;
+  }, [order.deliveryAddress?.latitude, order.deliveryAddress?.longitude]);
   const businessLocation = useMemo<[number, number] | null>(() => {
     const location = order.businessLocation;
     if (
       !location ||
-      !Number.isFinite(location.latitude) ||
-      !Number.isFinite(location.longitude)
+      !isValidCoordinate(location.latitude, location.longitude)
     ) {
       return null;
     }
@@ -138,6 +150,10 @@ const RiderOrderMap = ({ order, viewer = "rider" }: Props) => {
 
       navigator.geolocation.getCurrentPosition(
         ({ coords }) => {
+          if (!isValidCoordinate(coords.latitude, coords.longitude)) {
+            setLocationError("Your browser returned an invalid location.");
+            return;
+          }
           setLocationError(null);
           publishLocation(coords.latitude, coords.longitude);
         },
@@ -179,23 +195,41 @@ const RiderOrderMap = ({ order, viewer = "rider" }: Props) => {
     };
   }, [order._id, socket, viewer]);
 
-  const routeWaypoints = useMemo(() => {
-    if (!riderLocation) return [];
-    if (viewer === "customer") {
-      return [riderLocation, customerLocation];
-    }
-
-    if (!businessLocation || order.status !== "picked_up") {
-      return [riderLocation, customerLocation];
-    }
-
-    return [riderLocation, businessLocation];
-  }, [businessLocation, customerLocation, order.status, riderLocation, viewer]);
-
-  if (viewer === "rider" && !businessLocation) {
+  const activeDestination =
+    viewer === "customer"
+      ? customerLocation
+      : order.status === "picked_up"
+        ? customerLocation
+        : ["rider_assigned", "reached"].includes(order.status)
+          ? businessLocation
+          : null;
+  const routeWaypoints = useMemo(
+    () => (riderLocation && activeDestination ? [riderLocation, activeDestination] : []),
+    [activeDestination, riderLocation],
+  );
+  if (
+    viewer === "rider" &&
+    !["rider_assigned", "reached", "picked_up"].includes(order.status)
+  ) {
+    return (
+      <p className="rounded-2xl border border-[#E3E9E2] bg-white p-5 text-sm text-[#66736B]">
+        There is no active delivery navigation route.
+      </p>
+    );
+  }
+  if (!activeDestination && viewer === "rider") {
     return (
       <p className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-900">
-        Business location is unavailable, so the delivery route cannot be shown.
+        {order.status === "picked_up"
+          ? "Customer location is unavailable, so the delivery route cannot be shown."
+          : "Business location is unavailable, so the pickup route cannot be shown."}
+      </p>
+    );
+  }
+  if (viewer === "customer" && !customerLocation) {
+    return (
+      <p className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-900">
+        Customer location is unavailable, so the delivery route cannot be shown.
       </p>
     );
   }
@@ -239,10 +273,17 @@ const RiderOrderMap = ({ order, viewer = "rider" }: Props) => {
           <Marker position={riderLocation} icon={riderIcon}>
             <Popup>Rider’s current location</Popup>
           </Marker>
-          <Marker position={customerLocation} icon={customerIcon}>
-            <Popup>Customer location · {order.customerName || "Customer"}</Popup>
-          </Marker>
-          {businessLocation && (
+          {activeDestination && (viewer === "customer" || order.status === "picked_up") && (
+            <Marker position={activeDestination} icon={customerIcon}>
+              <Popup>Customer location · {order.customerName || "Customer"}</Popup>
+            </Marker>
+          )}
+          {activeDestination && viewer === "rider" && order.status !== "picked_up" && (
+            <Marker position={activeDestination} icon={businessIcon}>
+              <Popup>Business · {order.businessName}</Popup>
+            </Marker>
+          )}
+          {viewer === "customer" && businessLocation && (
             <Marker position={businessLocation} icon={businessIcon}>
               <Popup>Business · {order.businessName}</Popup>
             </Marker>

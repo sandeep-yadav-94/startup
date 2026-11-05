@@ -5,11 +5,16 @@ const storage = multer.memoryStorage();
 
 const upload = multer({
 	storage,
-	limits:{fileSize:5 * 1024 * 1024},
+	limits:{fileSize:5 * 1024 * 1024, files: 4},
 	fileFilter:(_req, file, callback)=>{
 		callback(null, file.mimetype.startsWith("image/"));
 	},
-}).single("file");
+}).fields([
+	{ name: "file", maxCount: 1 },
+	{ name: "idProofFront", maxCount: 1 },
+	{ name: "idProofBack", maxCount: 1 },
+	{ name: "upiQrCode", maxCount: 1 },
+]);
 
 const uploadFile: RequestHandler = (req, res, next) => {
 	upload(req, res, (error) => {
@@ -22,7 +27,7 @@ const uploadFile: RequestHandler = (req, res, next) => {
 			const isTooLarge = error.code === "LIMIT_FILE_SIZE";
 			res.status(isTooLarge ? 413 : 400).json({
 				message: isTooLarge
-					? "Rider image must be 5 MB or smaller"
+					? "Each uploaded image must be 5 MB or smaller"
 					: error.message,
 			});
 			return;

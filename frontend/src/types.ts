@@ -108,6 +108,9 @@ export interface IOrder {
         longitude:number;
     };
     status: "placed" | "accepted" | "preparing" | "ready_for_rider" | "wait for rider" | "rider_assigned" | "picked_up" | "reached" | "delivered" | "canceled";
+    reachedAt?: string | null;
+    pickedUpAt?: string | null;
+    deliveredAt?: string | null;
     paymentMethod:"razorpay";
     paymentStatus:"pending" | "paid" | "failed";
     expiresAt: Date;

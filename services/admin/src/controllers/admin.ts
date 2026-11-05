@@ -206,6 +206,7 @@ export const getVerificationOverview = TryCatch(async (req: Request, res: Respon
       aadhaarNumber: rider.addharNumber,
       drivingLicenseNumber: rider.drivingLicenseNumber,
       isAvailble: rider.isAvailble,
+      isBusy: rider.isBusy ?? false,
       isVerified: rider.isVerified,
       createdAt: rider.createdAt,
       user: usersById.get(rider.userId),
