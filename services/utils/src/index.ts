@@ -7,7 +7,7 @@ import paymentRoutes from './routes/payment.js';
 import { connectRabbitMQ } from './config/rabbitmq.js';
 dotenv.config();
 
-await connectRabbitMQ();
+connectRabbitMQ();
 
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 const apiKey = process.env.CLOUDINARY_API_KEY;

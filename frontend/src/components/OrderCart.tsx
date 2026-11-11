@@ -4,6 +4,7 @@ import { ORDER_ACTIONS } from "../utils/orderflow";
 import axios from "axios";
 import { businessService } from "../config";
 import toast from "react-hot-toast";
+import { FiArrowUpRight, FiCalendar, FiMapPin } from "react-icons/fi";
 
 
 interface  props {
@@ -14,21 +15,23 @@ interface  props {
 const statusColors = (status: string) => {
   switch (status) {
     case "placed":
-      return "bg-yellow-100 text-yellow-800";
+      return "border-[#f0dfb8] bg-[#fff9eb] text-[#927027]";
     case "accepted":
-      return "bg-orange-100 text-orange-800";
+      return "border-[#f0ddca] bg-[#fff6ed] text-[#a4612d]";
     case "preparing":
-      return "bg-green-100 text-green-800 ";
+      return "border-[#cfe6d4] bg-[#f0f8f1] text-[#438353]";
     case "ready_for_rider":
-      return "bg-indigo-100 text-indigo-800";
+      return "border-[#d7d9f0] bg-[#f3f3fb] text-[#6969a3]";
     case "reached":
-      return "bg-blue-100 text-blue-800";
+      return "border-[#d4e2ed] bg-[#f0f6fa] text-[#51799a]";
     case "picked_up":
-      return "bg-purple-100 text-purple-800";
+      return "border-[#e1d8ed] bg-[#f7f3fb] text-[#79639b]";
     case "delivered":
-      return "bg-gray-100 text-gray-800";
+      return "border-[#dce5de] bg-[#f3f7f3] text-[#62776a]";
+    case "canceled":
+      return "border-[#eed5d2] bg-[#fdf4f3] text-[#a4564c]";
     default:
-      return status;
+      return "border-[#e5e9e5] bg-[#f7f8f6] text-[#737d76]";
   }
 };
 
@@ -81,34 +84,58 @@ const OrderCart = ({ order, onStatusUpdate }: props) => {
 
   }
 
+  const createdAt = new Date(order.createdAt);
+  const dateLabel = Number.isNaN(createdAt.getTime())
+    ? "Date unavailable"
+    : new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(createdAt);
+
   return (
-    <div className="rounded-xl bg-white p-4 shadow-md space-y-3">
-      <div className="flex justify-between items-center">
-        <p className="text-sm font-medium">Order ID: #{order._id.slice(-6)}</p>
-        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors(order.status)}`}>{order.status.replaceAll("_", " ")}</span>
+    <article className="overflow-hidden rounded-lg border border-[#e5e9e5] bg-white transition hover:border-[#d5ddd6]">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#edf0ed] px-4 py-3.5">
+        <div>
+          <p className="font-mono text-xs font-semibold text-[#354039]">#{order._id.slice(-8).toUpperCase()}</p>
+          <p className="mt-1 flex items-center gap-1.5 text-[11px] text-[#818a83]"><FiCalendar size={12} />{dateLabel}</p>
+        </div>
+        <span className={`rounded-md border px-2.5 py-1 text-[10px] font-bold capitalize tracking-wide ${statusColors(order.status)}`}>{order.status.replaceAll("_", " ")}</span>
       </div>
-      <div className="text-sm text-gray-600 space-y-1">
-        {order.services.map((item, index) => (
-          <p key={index}>{item.name} x {item.quantity}</p>
-        ))}
-      </div>
-      <div className="flex justify-between text-sm font-medium">
-        <span>Total</span>
-        <span>₹{order.totalAmount}</span>
-      </div>
-      <p className="text-xs text-gray-400">Payment: {order.paymentStatus}</p>
+
+      <div className="space-y-3 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-[#303a33]">{order.customerName || "Customer"}</p>
+            <p className="mt-1 flex items-start gap-1.5 text-[11px] leading-4 text-[#818a83]"><FiMapPin className="mt-0.5 shrink-0" size={12} />{order.deliveryAddress?.formattedAddress || "Address unavailable"}</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-sm font-semibold text-[#303a33]">₹{Number(order.subtotal || 0).toLocaleString("en-IN")}</p>
+            <p className="mt-0.5 text-[10px] text-[#818a83]">Item sales</p>
+          </div>
+        </div>
+
+        <div className="space-y-1.5 border-y border-[#edf0ed] py-3">
+          {order.services.map((item, index) => (
+            <div key={`${item.serviceId}-${index}`} className="flex justify-between gap-3 text-xs">
+              <span className="min-w-0 truncate text-[#626c65]">{item.name} <span className="text-[#929a94]">× {item.quantity}</span></span>
+              <span className="shrink-0 text-[#626c65]">₹{(Number(item.price) * Number(item.quantity)).toLocaleString("en-IN")}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="text-[#818a83]">Payment</span>
+          <span className={`font-semibold capitalize ${order.paymentStatus === "paid" ? "text-[#438353]" : "text-[#a4612d]"}`}>{order.paymentStatus}</span>
+        </div>
 
       {
         order.paymentStatus === "paid" && actions.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
+          <div className="flex flex-wrap gap-2 pt-1">
             {actions.map((status) => (
               <button
                 key={status}
-                className="px-3 py-1 bg-blue-500 text-white text-xs font-semibold rounded-full hover:bg-blue-600 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-md bg-[#26312a] px-3 py-2 text-xs font-semibold capitalize text-white transition-colors hover:bg-[#3b4a3f] disabled:opacity-60"
                 onClick={() => updateStatus(status)}
                 disabled={loading}
               >
-                Mark as {status.replaceAll("_", " ")}
+                {loading ? "Updating..." : <>Mark {status.replaceAll("_", " ")} <FiArrowUpRight size={13} /></>}
               </button>
             ))}
           </div>
@@ -117,11 +144,12 @@ const OrderCart = ({ order, onStatusUpdate }: props) => {
 
       {
         order.status === "ready_for_rider" && retryVisible && <div className="pt-2">
-          <button className="w-full rounded-lg border-[#e23744] py-2 text-xs font-semibold text-[#e23744] hover:bg-red-50 disabled:opacity-50" onClick={()=>updateStatus("ready_for_rider")} disabled={loading}>Retry ready for rider</button>
+          <button className="w-full rounded-md border border-[#eed5d2] py-2 text-xs font-semibold text-[#a4564c] hover:bg-[#fdf4f3] disabled:opacity-50" onClick={()=>updateStatus("ready_for_rider")} disabled={loading}>Retry rider request</button>
         </div>
       }
 
-    </div>
+      </div>
+    </article>
   )
 }
 

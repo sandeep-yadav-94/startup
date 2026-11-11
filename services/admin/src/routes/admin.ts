@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getDashboardOverview,
+  getOrderDetails,
   getVerificationOverview,
   updateBusinessVerification,
   updateRiderVerification,
@@ -11,6 +12,7 @@ const router = Router();
 
 router.use(isAdmin);
 router.get("/dashboard", getDashboardOverview);
+router.get("/orders/:id", getOrderDetails);
 router.get("/verification", getVerificationOverview);
 router.patch("/businesses/:id/verification", updateBusinessVerification);
 router.patch("/riders/:id/verification", updateRiderVerification);

@@ -7,6 +7,7 @@ import type { IBusiness, ICart, IServiceList } from "../types";
 import { toast } from "react-hot-toast/headless";
 import { utilsService } from "../main";
 import { BiCreditCard, BiLoader } from "react-icons/bi";
+import { s } from "framer-motion/client";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -69,9 +70,9 @@ const Checkout = () => {
 
   const business = cart[0].businessId as IBusiness;
 
-  const deliveryFee = subTotal < 250 ? 49 : 0;
+  const deliveryFee = 5 + (subTotal * 0.02);
 
-  const platformFee = subTotal * 0.05;
+  const platformFee = 1;
 
   const grandTotal = subTotal + deliveryFee + platformFee;
 
@@ -179,18 +180,23 @@ const Checkout = () => {
           ) : (
             <ul className="space-y-2">
               {addresses.map((address) => (
-                <li key={address._id} className={`p-3 border rounded-lg cursor-pointer ${selectedAddressId === address._id ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`} >
-                  <input
-                    type="radio"
-                    id={address._id}
-                    name="address"
-                    checked={selectedAddressId === address._id}
-                    onChange={() => setSelectedAddressId(address._id)}
-                  />
-                  <div>
-                    <p className="text-gray-600">{address.formattedAddress}</p>
-                    <p className="text-gray-600">Mobile: {address.mobile}</p>
-                  </div>
+                <li
+                  key={address._id}
+                  className={`rounded-lg border p-3 ${selectedAddressId === address._id ? "border-blue-500 bg-blue-50" : "border-gray-300"}`}
+                >
+                  <label htmlFor={address._id} className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="radio"
+                      id={address._id}
+                      name="address"
+                      checked={selectedAddressId === address._id}
+                      onChange={() => setSelectedAddressId(address._id)}
+                    />
+                    <div>
+                      <p className="text-gray-600">{address.formattedAddress}</p>
+                      <p className="text-gray-600">Mobile: {address.mobile}</p>
+                    </div>
+                  </label>
                 </li>
               ))}
             </ul>
@@ -226,13 +232,13 @@ const Checkout = () => {
         </div>
 
         <div className="flex justify-between items-center py-2">
-          <p className="text-gray-600">Platform Fee (5%)</p>
+          <p className="text-gray-600">Platform Fee 1₹</p>
           <p className="text-gray-600">₹{platformFee.toFixed(2)}</p>
         </div>
 
         {
           subTotal < 250 && (
-            <p className="text-red-500 text-sm">Note: Orders below ₹250 will incur a delivery fee of ₹49.</p>
+            <p className="text-red-500 text-sm">Note: delivery fees = 5 + {subTotal * 0.02}.</p>
           )
         }
 
@@ -248,7 +254,7 @@ const Checkout = () => {
       <div className="rounded-xl bg-white p-4 shadow-sm space-y-3">
         <h3 className="text-lg font-semibold">Payment Options</h3>
         <button disabled={!selectedAddressId || loadingRazorpay || creatingOrder} onClick={payWithRazorpay} className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2">
-          {loadingRazorpay ? <BiLoader size={18} className="animate-spin"/> : <BiCreditCard size={18} />} Pay with Razorpay
+          {loadingRazorpay ? <BiLoader size={18} className="animate-spin"/> : <BiCreditCard size={18} />} Pay
           </button>
       </div>
     </div>

@@ -9,6 +9,10 @@ import {
   FiCheckCircle,
   FiClock,
   FiDollarSign,
+  FiExternalLink,
+  FiEye,
+  FiEyeOff,
+  FiFileText,
   FiLogOut,
   FiMapPin,
   FiPackage,
@@ -40,7 +44,7 @@ interface BusinessReview {
   name: string;
   description: string;
   image: string;
-  phone: number;
+  phone: number | string;
   address: string;
   isVerified: boolean;
   createdAt: string;
@@ -51,8 +55,8 @@ interface RiderReview {
   id: string;
   picture: string;
   phoneNumber: string;
-  aadhaarNumber: string;
-  drivingLicenseNumber: string;
+  aadhaarNumber?: string | null;
+  drivingLicenseNumber?: string | null;
   isAvailble: boolean;
   isBusy?: boolean;
   isVerified: boolean;
@@ -102,6 +106,89 @@ interface DashboardResponse {
   }>;
 }
 
+interface AdminOrderDetails {
+  order: {
+    id: string;
+    userId: string;
+    customerName?: string;
+    businessId: string;
+    businessName: string;
+    riderId?: string | null;
+    riderUserId?: string | null;
+    riderPhone?: string | null;
+    riderName?: string | null;
+    distance: number;
+    riderAmount: number;
+    services: Array<{ serviceId: string; name: string; price: number | string; quantity: number | string }>;
+    subtotal: number;
+    deliveryFee: number;
+    platformFee: number;
+    totalAmount: number;
+    addressId: string;
+    deliveryAddress: {
+      formattedAddress: string;
+      mobile: string;
+      latitude: number;
+      longitude: number;
+    };
+    status: string;
+    reachedAt?: string | null;
+    pickedUpAt?: string | null;
+    deliveredAt?: string | null;
+    paymentMethod: string;
+    paymentStatus: string;
+    expiresAt?: string;
+    createdAt: string;
+    updatedAt: string;
+  };
+  customer: AdminPerson | null;
+  merchant: {
+    id: string;
+    name: string;
+    ownerId: string;
+    description?: string;
+    image: string;
+    phone: number;
+    address?: string;
+    location?: number[];
+    isOpen?: boolean;
+    isVerified: boolean;
+    createdAt: string;
+    updatedAt?: string;
+    owner: AdminPerson | null;
+  } | null;
+  rider: {
+    id: string;
+    user: AdminPerson | null;
+    picture: string;
+    phoneNumber: string;
+    riderType?: string;
+    aadhaarNumber?: string;
+    drivingLicenseNumber?: string;
+    idProofFront?: string;
+    idProofBack?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    upiId?: string;
+    upiQrCode?: string;
+    isVerified: boolean;
+    isAvailable: boolean;
+    isBusy?: boolean;
+    lastActiveAt?: string;
+    createdAt: string;
+    updatedAt?: string;
+  } | null;
+}
+
+interface AdminPerson {
+  name: string;
+  email: string;
+  image?: string;
+  role?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 type ReviewAction = { type: "business" | "rider"; id: string } | null;
 
 const emptyCounts: VerificationCounts = {
@@ -130,7 +217,10 @@ const formatMoney = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount);
 
-const maskNumber = (value: string) => `${"•".repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
+const maskNumber = (value: string | null | undefined) =>
+  typeof value !== "string" || value.length === 0
+    ? "Not provided"
+    : `${"•".repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
 
 const AdminDashboard = () => {
   const { setIsAuth, setUser } = useAppData();
@@ -324,6 +414,8 @@ const AdminDashboard = () => {
           />
         ) : null}
 
+        <OrderLookup />
+
         <section className="flex flex-col justify-between gap-3 pt-2 sm:flex-row sm:items-end">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#AF6028]">Trust & safety</p>
@@ -456,8 +548,8 @@ const AdminDashboard = () => {
                           <div className="mt-4 grid gap-2 text-sm text-[#62594F] sm:grid-cols-2">
                             <p><span className="font-semibold text-[#403931]">Phone</span> · {rider.phoneNumber}</p>
                             <p><span className="font-semibold text-[#403931]">Availability</span> · {rider.isBusy ? "Busy" : rider.isAvailble ? "Online" : "Offline"}</p>
-                            <p><span className="font-semibold text-[#403931]">Aadhaar</span> · {revealed ? rider.aadhaarNumber : maskNumber(rider.aadhaarNumber)}</p>
-                            <p><span className="font-semibold text-[#403931]">Driving licence</span> · {revealed ? rider.drivingLicenseNumber : maskNumber(rider.drivingLicenseNumber)}</p>
+                            <p><span className="font-semibold text-[#403931]">Aadhaar</span> · {revealed ? rider.aadhaarNumber || "Not provided" : maskNumber(rider.aadhaarNumber)}</p>
+                            <p><span className="font-semibold text-[#403931]">Driving licence</span> · {revealed ? rider.drivingLicenseNumber || "Not provided" : maskNumber(rider.drivingLicenseNumber)}</p>
                           </div>
                           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#F0ECE6] pt-3">
                             <button
@@ -495,6 +587,312 @@ const AdminDashboard = () => {
     </main>
   );
 };
+
+const OrderLookup = () => {
+  const [orderId, setOrderId] = useState("");
+  const [details, setDetails] = useState<AdminOrderDetails | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState(false);
+
+  const loadOrder = async (id: string, revealSensitive: boolean, clearPrevious: boolean) => {
+    setLoading(true);
+    setError(null);
+    if (clearPrevious) {
+      setDetails(null);
+      setRevealed(false);
+    }
+
+    try {
+      const { data: response } = await axios.get<AdminOrderDetails>(
+        `${adminService}/api/admin/orders/${encodeURIComponent(id)}`,
+        {
+          params: { revealSensitive },
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        },
+      );
+      setDetails(response);
+      setRevealed(revealSensitive);
+    } catch (requestError: unknown) {
+      console.error("Failed to load order details:", requestError);
+      setError(getErrorMessage(requestError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchOrder = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const id = orderId.trim();
+    if (!id) {
+      setError("Enter an order ID to search.");
+      setDetails(null);
+      return;
+    }
+    await loadOrder(id, false, true);
+  };
+
+  return (
+    <section className="overflow-hidden rounded-3xl border border-[#E8E2D9] bg-white shadow-[0_20px_65px_-48px_rgba(48,42,36,0.5)]">
+      <div className="border-b border-[#EEEAE4] bg-gradient-to-r from-[#FBF8F3] to-white p-5 sm:p-7">
+        <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#AF6028]">Order support</p>
+            <h3 className="mt-1 text-2xl font-semibold text-[#302A24]" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
+              Order investigation
+            </h3>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[#746C63]">
+              Search an order ID to review its full timeline, customer, merchant, assigned rider and available documents.
+            </p>
+          </div>
+          <form onSubmit={(event) => void searchOrder(event)} className="flex w-full gap-2 md:max-w-xl">
+            <label htmlFor="admin-order-id" className="sr-only">Order ID</label>
+            <input
+              id="admin-order-id"
+              value={orderId}
+              onChange={(event) => setOrderId(event.target.value)}
+              placeholder="Full order ID or last 6 characters"
+              autoComplete="off"
+              className="min-h-12 min-w-0 flex-1 rounded-xl border border-[#E2DDD5] bg-white px-4 font-mono text-sm text-[#302A24] outline-none transition placeholder:font-sans placeholder:text-[#A69D93] focus:border-[#AF6028] focus:ring-4 focus:ring-[#AF6028]/10"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-xl bg-[#302A24] px-4 text-sm font-semibold text-white transition hover:bg-[#514337] disabled:cursor-wait disabled:opacity-60 sm:px-5"
+            >
+              <FiSearch aria-hidden="true" />
+              {loading ? "Searching" : "Find order"}
+            </button>
+          </form>
+        </div>
+        <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-[#8B8177]">
+          <FiShield className="mt-0.5 shrink-0 text-[#AF6028]" />
+          Identity and payout numbers are masked until explicitly revealed. Access is limited to the configured administrator.
+        </p>
+      </div>
+
+      <div className="p-5 sm:p-7">
+        {error && (
+          <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {error}
+          </div>
+        )}
+        {loading && !details ? (
+          <div className="animate-pulse space-y-3">
+            <div className="h-6 w-48 rounded bg-[#F0EEE9]" />
+            <div className="h-24 rounded-2xl bg-[#F7F6F2]" />
+          </div>
+        ) : details ? (
+          <div className="space-y-6">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8B8177]">Order record</p>
+                <h4 className="mt-1 break-all font-mono text-lg font-semibold text-[#302A24]">{details.order.id}</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadOrder(details.order.id, !revealed, false)}
+                disabled={loading}
+                className="inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-xl border border-[#E2DDD5] px-3 text-sm font-semibold text-[#62594F] transition hover:border-[#AF6028] hover:text-[#AF6028] disabled:opacity-60 sm:self-auto"
+              >
+                {revealed ? <FiEyeOff aria-hidden="true" /> : <FiEye aria-hidden="true" />}
+                {revealed ? "Hide sensitive numbers" : "Reveal sensitive numbers"}
+              </button>
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-2">
+              <DetailsPanel title="Order & payment">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <DetailField label="Status" value={details.order.status.replace(/_/g, " ")} />
+                  <DetailField label="Payment status" value={details.order.paymentStatus} />
+                  <DetailField label="Payment method" value={details.order.paymentMethod} />
+                  <DetailField label="Placed" value={formatDetailDate(details.order.createdAt)} />
+                  <DetailField label="Last updated" value={formatDetailDate(details.order.updatedAt)} />
+                  <DetailField label="Order expires" value={formatDetailDate(details.order.expiresAt)} />
+                  <DetailField label="Reached at" value={formatDetailDate(details.order.reachedAt)} />
+                  <DetailField label="Picked up at" value={formatDetailDate(details.order.pickedUpAt)} />
+                  <DetailField label="Delivered at" value={formatDetailDate(details.order.deliveredAt)} />
+                  <DetailField label="Delivery distance" value={`${details.order.distance} km`} />
+                  <DetailField label="Order user ID" value={details.order.userId} mono />
+                  <DetailField label="Business ID" value={details.order.businessId} mono />
+                  <DetailField label="Rider ID" value={details.order.riderId} mono />
+                  <DetailField label="Rider user ID" value={details.order.riderUserId} mono />
+                  <DetailField label="Rider assigned name" value={details.order.riderName} />
+                  <DetailField label="Rider assigned phone" value={details.order.riderPhone} />
+                </div>
+                <div className="mt-4 space-y-2 border-t border-[#F0ECE6] pt-4">
+                  {details.order.services.map((service, index) => (
+                    <div key={`${service.serviceId}-${index}`} className="flex justify-between gap-4 text-sm">
+                      <span className="text-[#62594F]">{service.name} × {service.quantity}</span>
+                      <span className="font-medium text-[#403931]">{formatMoney(Number(service.price) * Number(service.quantity))}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 grid gap-2 border-t border-[#F0ECE6] pt-4 sm:grid-cols-2">
+                  <DetailField label="Subtotal" value={formatMoney(details.order.subtotal)} />
+                  <DetailField label="Delivery fee" value={formatMoney(details.order.deliveryFee)} />
+                  <DetailField label="Platform fee" value={formatMoney(details.order.platformFee)} />
+                  <DetailField label="Rider amount" value={formatMoney(details.order.riderAmount)} />
+                  <div className="sm:col-span-2">
+                    <DetailField label="Order total" value={formatMoney(details.order.totalAmount)} />
+                  </div>
+                </div>
+              </DetailsPanel>
+
+              <DetailsPanel title="Customer & delivery">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <DetailField label="Customer name" value={details.customer?.name || details.order.customerName} />
+                  <DetailField label="Email" value={details.customer?.email} />
+                  <DetailField label="Account role" value={details.customer?.role} />
+                  <DetailField label="Account created" value={formatDetailDate(details.customer?.createdAt)} />
+                  <DetailField label="Account updated" value={formatDetailDate(details.customer?.updatedAt)} />
+                  <DetailField label="Delivery phone" value={details.order.deliveryAddress?.mobile} />
+                  <DetailField label="Address ID" value={details.order.addressId} mono />
+                  <div className="sm:col-span-2">
+                    <DetailField label="Delivery address" value={details.order.deliveryAddress?.formattedAddress} />
+                  </div>
+                  <DetailField label="Delivery latitude" value={details.order.deliveryAddress?.latitude} />
+                  <DetailField label="Delivery longitude" value={details.order.deliveryAddress?.longitude} />
+                </div>
+                {details.customer?.image && (
+                  <DocumentLink label="Customer profile image" url={details.customer.image} />
+                )}
+              </DetailsPanel>
+
+              <DetailsPanel title="Merchant & owner">
+                {details.merchant ? (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <DetailField label="Business name" value={details.merchant.name} />
+                      <DetailField label="Business ID" value={details.merchant.id} mono />
+                      <DetailField label="Owner user ID" value={details.merchant.ownerId} mono />
+                      <DetailField label="Business phone" value={details.merchant.phone} />
+                      <DetailField label="Address" value={details.merchant.address} />
+                      <DetailField label="Open" value={details.merchant.isOpen ? "Yes" : "No"} />
+                      <DetailField label="Verified" value={details.merchant.isVerified ? "Yes" : "No"} />
+                      <DetailField label="Created" value={formatDetailDate(details.merchant.createdAt)} />
+                      <DetailField label="Updated" value={formatDetailDate(details.merchant.updatedAt)} />
+                      <div className="sm:col-span-2">
+                        <DetailField label="Description" value={details.merchant.description} />
+                      </div>
+                    </div>
+                    {details.merchant.location?.length === 2 && (
+                      <DetailField label="Business coordinates" value={details.merchant.location.join(", ")} />
+                    )}
+                    <div className="mt-4 border-t border-[#F0ECE6] pt-4">
+                      <p className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-[#8B8177]">Owner account</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <DetailField label="Name" value={details.merchant.owner?.name} />
+                        <DetailField label="Email" value={details.merchant.owner?.email} />
+                        <DetailField label="Role" value={details.merchant.owner?.role} />
+                        <DetailField label="Account created" value={formatDetailDate(details.merchant.owner?.createdAt)} />
+                        <DetailField label="Account updated" value={formatDetailDate(details.merchant.owner?.updatedAt)} />
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <DocumentLink label="Business profile image" url={details.merchant.image} />
+                      {details.merchant.owner?.image && (
+                        <DocumentLink label="Owner profile image" url={details.merchant.owner.image} />
+                      )}
+                    </div>
+                    <p className="mt-3 text-xs text-[#8B8177]">No additional merchant verification documents are stored in the available business profile.</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-[#8B8177]">Merchant profile is unavailable for this order.</p>
+                )}
+              </DetailsPanel>
+
+              <DetailsPanel title="Assigned rider & documents">
+                {details.rider ? (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <DetailField label="Name" value={details.rider.user?.name || details.order.riderName} />
+                      <DetailField label="Email" value={details.rider.user?.email} />
+                      <DetailField label="Role" value={details.rider.user?.role} />
+                      <DetailField label="Rider type" value={details.rider.riderType} />
+                      <DetailField label="Phone" value={details.rider.phoneNumber} />
+                      <DetailField label="Aadhaar" value={details.rider.aadhaarNumber} />
+                      <DetailField label="Driving licence" value={details.rider.drivingLicenseNumber} />
+                      <DetailField label="Account number" value={details.rider.accountNumber} />
+                      <DetailField label="IFSC" value={details.rider.ifscCode} />
+                      <DetailField label="UPI ID" value={details.rider.upiId} />
+                      <DetailField label="Verified" value={details.rider.isVerified ? "Yes" : "No"} />
+                      <DetailField label="Availability" value={details.rider.isBusy ? "Busy" : details.rider.isAvailable ? "Online" : "Offline"} />
+                      <DetailField label="Last active" value={formatDetailDate(details.rider.lastActiveAt)} />
+                      <DetailField label="Account created" value={formatDetailDate(details.rider.user?.createdAt)} />
+                      <DetailField label="Rider profile created" value={formatDetailDate(details.rider.createdAt)} />
+                      <DetailField label="Rider profile updated" value={formatDetailDate(details.rider.updatedAt)} />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <DocumentLink label="Rider profile photo" url={details.rider.picture} />
+                      <DocumentLink label="ID proof — front" url={details.rider.idProofFront} />
+                      <DocumentLink label="ID proof — back" url={details.rider.idProofBack} />
+                      <DocumentLink label="UPI QR code" url={details.rider.upiQrCode} />
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-[#8B8177]">No rider is assigned to this order, or the rider profile is unavailable.</p>
+                )}
+              </DetailsPanel>
+            </div>
+          </div>
+        ) : !error ? (
+          <div className="rounded-2xl border border-dashed border-[#E2DDD5] px-5 py-8 text-center">
+            <FiFileText className="mx-auto text-2xl text-[#AF6028]" />
+            <p className="mt-3 text-sm font-semibold text-[#403931]">Look up an order to inspect its details</p>
+            <p className="mt-1 text-xs text-[#8B8177]">Use the order ID from the order record or customer support request.</p>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+};
+
+const formatDetailDate = (value?: string | Date | null) => {
+  if (!value) return "Not available";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Not available" : date.toLocaleString("en-IN");
+};
+
+const DetailsPanel = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <section className="rounded-2xl border border-[#E9E4DC] bg-[#FEFDFC] p-4 sm:p-5">
+    <h5 className="mb-4 text-base font-semibold text-[#302A24]">{title}</h5>
+    {children}
+  </section>
+);
+
+const DetailField = ({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value?: string | number | null;
+  mono?: boolean;
+}) => {
+  const text = value === undefined || value === null || value === "" ? "Not available" : String(value);
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-[#8B8177]">{label}</p>
+      <p className={`mt-1 break-words text-sm text-[#403931] ${mono ? "font-mono text-xs" : ""}`}>{text}</p>
+    </div>
+  );
+};
+
+const DocumentLink = ({ label, url }: { label: string; url?: string | null }) => (
+  url ? (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#E8E2D9] bg-white px-3 py-2 text-xs font-semibold text-[#62594F] transition hover:border-[#AF6028] hover:text-[#AF6028]"
+    >
+      <FiFileText aria-hidden="true" />
+      {label}
+      <FiExternalLink aria-hidden="true" />
+    </a>
+  ) : null
+);
 
 const AnalyticsDashboard = ({
   data,

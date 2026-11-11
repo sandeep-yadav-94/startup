@@ -8,14 +8,14 @@ import AddServiceList from "../components/AddServiceList";
 import type { IBusiness, IServiceList } from "../types";
 import BusinessOrders from "../components/BusinessOrders";
 
-type MerchantTab = "services" | "add-service" | "bookings"
+type MerchantTab = "bookings" | "services" | "add-service"
 
-const business = () => {
+const Business = () => {
 
   const [business, setBusiness] = useState<IBusiness | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [tab, setTab] = useState<MerchantTab>("services");
+  const [tab, setTab] = useState<MerchantTab>("bookings");
 
   const fetchmyBusiness = async() => {
     try {
@@ -42,7 +42,7 @@ const business = () => {
   }
 
   useEffect(()=>{
-    fetchmyBusiness();
+    void Promise.resolve().then(fetchmyBusiness);
   }, []);
 
   const [serviceList, setServiceList] = useState<IServiceList[]>([]);
@@ -62,7 +62,7 @@ const business = () => {
 
   useEffect(()=>{
     if(business?._id){
-      fetchServiceList(business._id)
+      void Promise.resolve().then(() => fetchServiceList(business._id));
     }
   }, [business])
 
@@ -73,37 +73,56 @@ const business = () => {
     return <AddBusiness fetchmyBusiness={fetchmyBusiness}/>
   }
 
-  return <div className="min-h-screen bg-gray-50 px-4 py-6 space-y-6"><BusinessProfile business={business}onUpdate={setBusiness} isMerchant={true}/>
+  const tabs: { key: MerchantTab; label: string; description: string }[] = [
+    { key: "bookings", label: "Bookings & earnings", description: "Orders, sales and payout status" },
+    { key: "services", label: "Your services", description: "Manage your listing" },
+    { key: "add-service", label: "Add a service", description: "Grow your catalog" },
+  ];
 
-  <BusinessOrders businessId={business._id} />
+  return (
+    <div className="min-h-screen space-y-6 bg-[#f7f8f6] px-3 py-5 sm:px-5 sm:py-7">
+      <BusinessProfile business={business} onUpdate={setBusiness} isMerchant={true} />
 
-  <div className="rounded-xl bg-white shadow-sm">
-    <div className="flex border-b">
-      {
-        [
-          {key:"services", label:"Services-list"},
-          {key:"add-service", label:"Add service"},
-          {key:"bookings", label:"Bookings"}
-        ].map((t)=>(
-          <button key={t.key} onClick={()=>setTab(t.key as MerchantTab)} className={`flex-1 px-4 py-3 text-sm font-medium transition ${tab === t.key ? "border-b-2 border-red-500 text-red-500 " : "text-gray-500 hover:text-gray-700"}`}>{t.label}</button>
-        ))
-      }
+      <main className="mx-auto max-w-7xl">
+        <div className="mb-5 overflow-hidden rounded-lg border border-[#e5e9e5] bg-white">
+          <nav aria-label="Merchant workspace" className="flex overflow-x-auto">
+            {tabs.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setTab(item.key)}
+                aria-current={tab === item.key ? "page" : undefined}
+                className={`min-w-40 flex-1 border-b-2 px-4 py-3.5 text-left transition sm:px-5 ${tab === item.key ? "border-[#af6028] bg-[#fbf8f5]" : "border-transparent hover:bg-[#fafbf9]"}`}
+              >
+                <span className={`block text-sm font-semibold ${tab === item.key ? "text-[#8f4e27]" : "text-[#59635c]"}`}>{item.label}</span>
+                <span className="mt-0.5 hidden text-[11px] text-[#89928b] sm:block">{item.description}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {tab === "bookings" && <BusinessOrders businessId={business._id} />}
+        {tab === "services" && (
+          <section className="rounded-lg border border-[#e5e9e5] bg-white p-4 sm:p-6">
+            <div className="mb-5">
+              <p className="text-[10px] font-bold tracking-[0.14em] text-[#AF6028]">YOUR CATALOG</p>
+              <h2 className="mt-1 text-xl font-semibold text-[#26312a]">Manage services</h2>
+            </div>
+            <ServiceList Service={serviceList} onServiceDeleted={() => fetchServiceList(business._id)} isMerchant={true} />
+          </section>
+        )}
+        {tab === "add-service" && (
+          <section className="rounded-lg border border-[#e5e9e5] bg-white p-4 sm:p-6">
+            <div className="mb-5">
+              <p className="text-[10px] font-bold tracking-[0.14em] text-[#AF6028]">GROW YOUR CATALOG</p>
+              <h2 className="mt-1 text-xl font-semibold text-[#26312a]">Add a service</h2>
+            </div>
+            <AddServiceList onServiceAdded={() => fetchServiceList(business._id)} />
+          </section>
+        )}
+      </main>
     </div>
-
-    <div className="p-5">
-      {
-        tab === "services" && <ServiceList Service={serviceList} onServiceDeleted={()=>fetchServiceList(business._id)} isMerchant={true}/>
-      }
-      {
-        tab === "add-service" && <AddServiceList onServiceAdded={()=>fetchServiceList(business._id)}/>
-      }
-      {
-        tab === "bookings" && <p>Bookings Page</p>
-      }
-    </div>
-
-  </div>
-  </div>;
+  );
 };
 
-export default business;
+export default Business;

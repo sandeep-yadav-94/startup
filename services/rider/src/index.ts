@@ -8,9 +8,8 @@ import { startOrderReadyConsumer } from './config/orderReady.consumer.js';
 
 dotenv.config();
 
-await connectRabbitMQ();
 await connectDB();
-await startOrderReadyConsumer();
+connectRabbitMQ(startOrderReadyConsumer);
 
 const app = express();
 

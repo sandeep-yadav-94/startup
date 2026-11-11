@@ -6,6 +6,9 @@ import { Rider } from '../model/Rider.js'
 export const startOrderReadyConsumer = async() => {
 
   const channel = getChannel();
+  if (!channel) {
+    throw new Error("RabbitMQ channel is not initialized");
+  }
 
   console.log("starting the consume from : ", process.env.ORDER_READY_QUEUE);
 

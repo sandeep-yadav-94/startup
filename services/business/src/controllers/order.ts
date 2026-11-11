@@ -143,8 +143,8 @@ export const createOrder = TryCatch(async(req:AuthenticatedRequest, res)=>{
         };
     });
 
-    const deliveryFee = subtotal < 250 ? 49 : 0;
-    const platformFee = subtotal * 0.05;
+    const deliveryFee = 5 + subtotal * 0.02;
+    const platformFee = 1;
     const totalAmount = subtotal + deliveryFee + platformFee;
 
     const expiresAt = new Date(Date.now() + 15*60*1000);

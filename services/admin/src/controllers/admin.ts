@@ -3,6 +3,14 @@ import mongoose from "mongoose";
 import TryCatch from "../middlewares/trycatch.js";
 import { Business, Order, Rider, User } from "../models/entities.js";
 
+const maskSensitiveValue = (value: string | number | null | undefined) => {
+  if (value === undefined || value === null || value === "") return value;
+  const text = String(value);
+  return text.length <= 4
+    ? "•".repeat(text.length)
+    : `${"•".repeat(text.length - 4)}${text.slice(-4)}`;
+};
+
 const getStatusFilter = (status: unknown): boolean | undefined => {
   if (status === "pending") return false;
   if (status === "verified") return true;
@@ -148,6 +156,161 @@ export const getDashboardOverview = TryCatch(async (req: Request, res: Response)
     trends,
     topBusinesses: result?.topBusinesses ?? [],
     recentOrders: result?.recentOrders ?? [],
+  });
+});
+
+export const getOrderDetails = TryCatch(async (req: Request, res: Response) => {
+  const rawId = req.params.id;
+  const id = typeof rawId === "string"
+    ? rawId.trim().replace(/^order\s*/i, "").replace(/^#/, "").toLowerCase()
+    : "";
+  if (!id || !/^[0-9a-f]{6,24}$/.test(id)) {
+    return res.status(400).json({ message: "Enter a full order ID or at least its last 6 hexadecimal characters" });
+  }
+
+  const revealSensitive = req.query.revealSensitive === "true";
+  let orderId = id;
+  if (id.length < 24) {
+    const matches = await Order.aggregate<{ _id: mongoose.Types.ObjectId }>([
+      {
+        $match: {
+          $expr: {
+            $regexMatch: {
+              input: { $toString: "$_id" },
+              regex: `${id}$`,
+              options: "i",
+            },
+          },
+        },
+      },
+      { $limit: 2 },
+      { $project: { _id: 1 } },
+    ]);
+
+    if (matches.length === 0) {
+      return res.status(404).json({ message: "No order matches that ID" });
+    }
+    if (matches.length > 1) {
+      return res.status(409).json({
+        message: "More than one order matches those characters. Enter the full 24-character order ID.",
+      });
+    }
+    orderId = matches[0]!._id.toString();
+  }
+
+  const order = await Order.findById(orderId).lean();
+  if (!order) {
+    return res.status(404).json({ message: "Order not found" });
+  }
+
+  res.set("Cache-Control", "no-store, private");
+
+  const [customer, business, rider] = await Promise.all([
+    mongoose.isValidObjectId(order.userId)
+      ? User.findById(order.userId).select("name email image role createdAt updatedAt").lean()
+      : null,
+    mongoose.isValidObjectId(order.businessId)
+      ? Business.findById(order.businessId)
+          .select("name description image ownerId phone isVerified isOpen autoLocation createdAt updatedAt")
+          .lean()
+      : null,
+    order.riderId && mongoose.isValidObjectId(order.riderId)
+      ? Rider.findById(order.riderId)
+          .select("userId picture phoneNumber riderType addharNumber drivingLicenseNumber idProofFront idProofBack accountNumber ifscCode upiId upiQrCode isVerified isAvailble isBusy lastActiveAt createdAt updatedAt")
+          .lean()
+      : order.riderUserId
+        ? Rider.findOne({ userId: order.riderUserId })
+            .select("userId picture phoneNumber riderType addharNumber drivingLicenseNumber idProofFront idProofBack accountNumber ifscCode upiId upiQrCode isVerified isAvailble isBusy lastActiveAt createdAt updatedAt")
+            .lean()
+        : null,
+  ]);
+
+  const businessOwner = business?.ownerId && mongoose.isValidObjectId(business.ownerId)
+    ? await User.findById(business.ownerId).select("name email image role createdAt updatedAt").lean()
+    : null;
+  const riderUserId = order.riderUserId || rider?.userId;
+  const riderUser = riderUserId && mongoose.isValidObjectId(riderUserId)
+    ? await User.findById(riderUserId).select("name email image role createdAt updatedAt").lean()
+    : null;
+
+  return res.json({
+    order: {
+      id: order._id.toString(),
+      userId: order.userId,
+      customerName: order.customerName,
+      businessId: order.businessId,
+      businessName: order.businessName,
+      riderId: order.riderId,
+      riderUserId: order.riderUserId,
+      riderPhone: revealSensitive ? order.riderPhone : maskSensitiveValue(order.riderPhone),
+      riderName: order.riderName,
+      distance: order.distance,
+      riderAmount: order.riderAmount,
+      services: order.services,
+      subtotal: order.subtotal,
+      deliveryFee: order.deliveryFee,
+      platformFee: order.platformFee,
+      totalAmount: order.totalAmount,
+      addressId: order.addressId,
+      deliveryAddress: {
+        ...order.deliveryAddress,
+        mobile: revealSensitive
+          ? order.deliveryAddress?.mobile
+          : maskSensitiveValue(order.deliveryAddress?.mobile) ?? "",
+      },
+      status: order.status,
+      reachedAt: order.reachedAt,
+      pickedUpAt: order.pickedUpAt,
+      deliveredAt: order.deliveredAt,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus,
+      expiresAt: order.expiresAt,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+    },
+    customer,
+    merchant: business
+      ? {
+          id: business._id.toString(),
+          name: business.name,
+          ownerId: business.ownerId,
+          description: business.description,
+          image: business.image,
+          phone: revealSensitive ? business.phone : maskSensitiveValue(business.phone) ?? "",
+          address: business.autoLocation?.formattedAddress,
+          location: business.autoLocation?.coordinates,
+          isOpen: business.isOpen,
+          isVerified: business.isVerified,
+          createdAt: business.createdAt,
+          updatedAt: business.updatedAt,
+          owner: businessOwner,
+        }
+      : null,
+    rider: rider
+      ? {
+          id: rider._id.toString(),
+          user: riderUser,
+          picture: rider.picture,
+          phoneNumber: revealSensitive ? rider.phoneNumber : maskSensitiveValue(rider.phoneNumber) ?? "",
+          riderType: rider.riderType,
+          aadhaarNumber: revealSensitive ? rider.addharNumber : maskSensitiveValue(rider.addharNumber),
+          drivingLicenseNumber: revealSensitive
+            ? rider.drivingLicenseNumber
+            : maskSensitiveValue(rider.drivingLicenseNumber),
+          idProofFront: rider.idProofFront,
+          idProofBack: rider.idProofBack,
+          accountNumber: revealSensitive ? rider.accountNumber : maskSensitiveValue(rider.accountNumber),
+          ifscCode: revealSensitive ? rider.ifscCode : maskSensitiveValue(rider.ifscCode),
+          upiId: revealSensitive ? rider.upiId : maskSensitiveValue(rider.upiId),
+          upiQrCode: rider.upiQrCode,
+          isVerified: rider.isVerified,
+          isAvailable: rider.isAvailble,
+          isBusy: rider.isBusy,
+          lastActiveAt: rider.lastActiveAt,
+          createdAt: rider.createdAt,
+          updatedAt: rider.updatedAt,
+        }
+      : null,
   });
 });
 

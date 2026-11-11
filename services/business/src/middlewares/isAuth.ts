@@ -37,7 +37,16 @@ export const isAuth = async (req: AuthenticatedRequest, res: Response, next: Nex
         req.user = decodedValue.user as IUser;
         next();
     } catch (error) {
-        res.status(500).json({ message: "Please Login Again" });
+        if (error instanceof jwt.TokenExpiredError) {
+            res.status(401).json({ message: "Token expired" });
+            return;
+        }
+        if (error instanceof jwt.JsonWebTokenError) {
+            res.status(401).json({ message: "Invalid token" });
+            return;
+        }
+        console.error("Authentication token verification failed:", error);
+        res.status(500).json({ message: "Unable to verify your sign-in" });
     }
 }
 

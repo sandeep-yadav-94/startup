@@ -1,13 +1,65 @@
-import amqp from 'amqplib';
+import amqp from "amqplib";
 
-let channel : amqp.Channel;
+let channel: amqp.Channel | undefined;
+let reconnectTimer: NodeJS.Timeout | undefined;
+let connecting = false;
 
-export const connectRabbitMQ = async () => {
-  const connection = await amqp.connect(process.env.RABBITMQ_URL || 'amqp://localhost');
-  channel = await connection.createChannel();
-  await channel.assertQueue(process.env.ORDER_READY_QUEUE!, { durable: true });
-  console.log('Connected to RabbitMQ (rider service)');
-  return channel;
-}
+const RECONNECT_DELAY_MS = 5000;
 
-export const getChannel = () => channel;
+type OnConnected = () => Promise<void> | void;
+
+const scheduleReconnect = (onConnected?: OnConnected) => {
+  if (reconnectTimer) return;
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = undefined;
+    void openConnection(onConnected);
+  }, RECONNECT_DELAY_MS);
+};
+
+const openConnection = async (onConnected?: OnConnected): Promise<void> => {
+  if (connecting) return;
+  connecting = true;
+
+  let nextChannel: amqp.Channel | undefined;
+  try {
+    const connection = await amqp.connect(process.env.RABBITMQ_URL || "amqp://localhost");
+    connection.on("error", (error) => console.error("RabbitMQ connection error (rider service):", error));
+
+    nextChannel = await connection.createChannel();
+    nextChannel.on("error", (error) => console.error("RabbitMQ channel error (rider service):", error));
+
+    const handleClose = () => {
+      if (channel !== nextChannel) return;
+      channel = undefined;
+      connecting = false;
+      console.warn("RabbitMQ connection closed (rider service); reconnecting shortly.");
+      scheduleReconnect(onConnected);
+    };
+    connection.on("close", handleClose);
+    nextChannel.on("close", handleClose);
+
+    await nextChannel.assertQueue(process.env.ORDER_READY_QUEUE!, { durable: true });
+    channel = nextChannel;
+    connecting = false;
+
+    await onConnected?.();
+    console.log("Connected to RabbitMQ (rider service)");
+  } catch (error) {
+    if (channel === nextChannel) channel = undefined;
+    connecting = false;
+    console.error("Unable to initialize RabbitMQ (rider service); retrying shortly:", error);
+    if (nextChannel) {
+      await nextChannel.close().catch((closeError) => {
+        console.error("Unable to close failed RabbitMQ channel (rider service):", closeError);
+      });
+    }
+    scheduleReconnect(onConnected);
+  }
+};
+
+export const connectRabbitMQ = (onConnected?: OnConnected): void => {
+  void openConnection(onConnected);
+};
+
+export const getChannel = (): amqp.Channel | undefined => channel;

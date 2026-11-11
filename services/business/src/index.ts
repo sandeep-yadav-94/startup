@@ -11,8 +11,7 @@ import { connectRabbitMQ } from "./config/rabbitmq.js";
 import { startPaymentConsumer } from "./config/payment.consumer.js";
 dotenv.config();
 
-await connectRabbitMQ();
-startPaymentConsumer();
+connectRabbitMQ(startPaymentConsumer);
 
 const app = express();
 

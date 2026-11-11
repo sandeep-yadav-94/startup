@@ -122,7 +122,7 @@ const Cart = () => {
                   <p className="text-xs font-medium uppercase tracking-wide text-red-500">{business.name}</p>
                   <h2 className="mt-1 text-lg font-semibold text-gray-900">{service.name}</h2>
                   <p className="mt-1 text-sm text-gray-500">{service.description}</p>
-                  <p className="mt-2 text-sm font-medium text-gray-700">₹{service.price} / person</p>
+                  <p className="mt-2 text-sm font-medium text-gray-700">₹{service.price} /item</p>
                 </div>
 
                 <div className="flex flex-col justify-between gap-3 md:items-end">
@@ -146,7 +146,7 @@ const Cart = () => {
 
                   <div className="text-right">
                     <p className="text-lg font-semibold text-gray-900">₹{lineTotal}</p>
-                    <p className="text-xs text-gray-500">{item.quantity} people</p>
+                    <p className="text-xs text-gray-500">{item.quantity} item</p>
                   </div>
                 </div>
               </div>
@@ -159,7 +159,7 @@ const Cart = () => {
 
           <div className="mt-5 space-y-3 text-sm text-gray-600">
             <div className="flex justify-between">
-              <span>Total people</span>
+              <span>Total item</span>
               <span className="font-medium text-gray-900">{quantity}</span>
             </div>
             <div className="flex justify-between">
