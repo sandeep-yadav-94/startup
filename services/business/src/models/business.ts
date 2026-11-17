@@ -7,6 +7,8 @@ export interface IBusiness extends Document {
     ownerId:string;
     phone:number;
     isVerified:boolean;
+    categoryId?: string | null;
+    categoryName?: string | null;
 
     autoLocation:{
         type: "Point",
@@ -36,6 +38,14 @@ const schema = new Schema<IBusiness>({
     phone:{
         type:Number,
         required:true
+    },
+    categoryId:{
+        type:String,
+        default:null,
+    },
+    categoryName:{
+        type:String,
+        default:null,
     },
     isVerified:{
         type:Boolean,

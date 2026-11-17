@@ -9,30 +9,46 @@ import { useGoogleLogin } from '@react-oauth/google';
 import {FcGoogle} from  "react-icons/fc"
 import { motion, useReducedMotion } from "framer-motion";
 import { useAppData } from "../context/AppContext";
+import type { User } from "../types";
+import { FiMoreVertical } from "react-icons/fi";
 
 
 
 
 
 
-const login = () => {
+const Login = () => {
 
     const [loading, setLoading] = useState(false);
+    const [selectedRole, setSelectedRole] = useState<"customer" | "rider" | "merchant">("customer");
+    const [roleMenuOpen, setRoleMenuOpen] = useState(false);
     const navigate = useNavigate();
     const shouldReduceMotion = useReducedMotion();
     const { setIsAuth, setUser } = useAppData();
 
-    const responseGoogle = async (authResult: any) => {
+    const responseGoogle = async (authResult: { code: string }) => {
         setLoading(true);
         try {
-            const result = await axios.post(`${authService}/api/auth/login`, {
-                code: authResult["code"],
-            })
-            localStorage.setItem("token", result.data.token);
-            setUser(result.data.user);
+            const result = await axios.post<{ token: string; user: User; message: string }>(`${authService}/api/auth/login`, {
+                code: authResult.code,
+            });
+            let token = result.data.token;
+            let user = result.data.user;
+
+            if (user.role === null) {
+                const roleResult = await axios.put<{ token: string; user: User }>(
+                    `${authService}/api/auth/add/role`,
+                    { role: selectedRole },
+                    { headers: { Authorization: `Bearer ${token}` } },
+                );
+                token = roleResult.data.token;
+                user = roleResult.data.user;
+            }
+
+            localStorage.setItem("token", token);
+            setUser(user);
             setIsAuth(true);
             toast.success(result.data.message);
-            setLoading(false);
             navigate("/");
         } catch (error) {
             console.error("Login request failed:", error);
@@ -53,7 +69,7 @@ const login = () => {
 
     const googleLogin = useGoogleLogin({
         onSuccess: responseGoogle,
-        onError: responseGoogle,
+        onError: () => toast.error("Google sign-in failed. Please try again."),
         flow: 'auth-code',
     });
 
@@ -129,6 +145,52 @@ const login = () => {
                 }}
             >
                 <div className="w-full max-w-md">
+                    <div className="mb-5">
+                        <div className="flex justify-end">
+                            <button
+                                type="button"
+                                aria-label="More sign-up options"
+                                aria-haspopup="menu"
+                                aria-expanded={roleMenuOpen}
+                                onClick={() => setRoleMenuOpen((open) => !open)}
+                                className="flex h-11 w-11 items-center justify-center rounded-full border border-[#DDDAD2] bg-white/90 text-[#625e55] shadow-sm transition hover:border-[#C1641F]/50 hover:bg-white hover:text-[#AF6028] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#D16616]/25"
+                            >
+                                <FiMoreVertical size={20} />
+                            </button>
+                        </div>
+                        {roleMenuOpen && (
+                            <div role="menu" aria-label="Choose account type" className="ml-auto mt-2 w-full max-w-64 rounded-2xl border border-[#e8e2d9] bg-white p-2 shadow-[0_18px_48px_-20px_rgba(48,42,36,0.35)]">
+                                <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#93897c]">Join Sushmap as</p>
+                                {selectedRole !== "customer" && (
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => { setSelectedRole("customer"); setRoleMenuOpen(false); }}
+                                        className="w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[#514d45] transition hover:bg-[#f7f4ee]"
+                                    >
+                                        Continue as a customer
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setSelectedRole("rider"); setRoleMenuOpen(false); }}
+                                    className={`w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:bg-[#f7f4ee] ${selectedRole === "rider" ? "bg-[#f7f4ee] text-[#AF6028]" : "text-[#514d45]"}`}
+                                >
+                                    Join as a rider
+                                </button>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setSelectedRole("merchant"); setRoleMenuOpen(false); }}
+                                    className={`w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:bg-[#f7f4ee] ${selectedRole === "merchant" ? "bg-[#f7f4ee] text-[#AF6028]" : "text-[#514d45]"}`}
+                                >
+                                    Register as a merchant
+                                </button>
+                                <p className="px-3 pb-2 pt-1 text-[11px] leading-4 text-[#918a80]">Existing accounts keep their current role.</p>
+                            </div>
+                        )}
+                    </div>
                     <div aria-hidden="true" className="mx-auto mb-6 h-1 w-10 rounded-full bg-[#DCDDD5] lg:hidden" />
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#C1641F]">
                         Your next local favorite
@@ -161,7 +223,7 @@ const login = () => {
                         ) : (
                             <FcGoogle size={20} />
                         )}
-                        {loading ? "Signing in..." : "Continue with Google"}
+                        {loading ? "Signing in..." : selectedRole === "customer" ? "Continue with Google" : `Continue with Google as ${selectedRole}`}
                     </motion.button>
 
                     <p className="mt-5 text-center text-[11px] leading-5 text-[#746C63] sm:text-xs sm:leading-6 lg:text-left">
@@ -187,4 +249,4 @@ const login = () => {
   )
 }
 
-export default login
+export default Login

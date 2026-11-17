@@ -1,5 +1,6 @@
 import axios from "axios";
 import getBuffer from "../config/datauri.js";
+import { getBusinessCategoryById } from "../config/businessCategories.js";
 import { AuthenticatedRequest } from "../middlewares/isAuth.js";
 import TryCatch from "../middlewares/trycatch.js";
 import business from "../models/business.js";
@@ -22,10 +23,18 @@ export const addBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
             message: "You already have a merchant account..",
         })
     }
-    const {name, description, latitude, longitude, formattedAddress, phone} = req.body;
+    const {name, description, latitude, longitude, formattedAddress, phone, categoryId, categoryName} = req.body;
     const latitudeNumber = Number(latitude);
     const longitudeNumber = Number(longitude);
     const phoneNumber = Number(phone);
+    const selectedCategory = typeof categoryId === "string" ? getBusinessCategoryById(categoryId) : null;
+
+    if(categoryId !== undefined && categoryId !== null && categoryId !== "" && !selectedCategory){
+        return res.status(400).json({
+            message:"Please select a valid business category",
+        });
+    }
+
     if(!name || phone === undefined || phone === null || phone === "" || !Number.isFinite(latitudeNumber) || !Number.isFinite(longitudeNumber) || !Number.isFinite(phoneNumber)){
         return res.status(400).json({
             message:"Please give all details",
@@ -51,12 +60,17 @@ export const addBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
             message:"Failed to upload business image",
         })
     }
+    const categoryValue = selectedCategory ? selectedCategory.name : undefined;
+    const safeCategoryName = typeof categoryName === "string" && categoryName.trim() ? categoryName.trim() : categoryValue;
+
     const createdBusiness = await business.create({
         name,
         description,
         phone:phoneNumber,
         image:uploadResult.url,
         ownerId:user._id,
+        categoryId: selectedCategory?.id ?? null,
+        categoryName: safeCategoryName ?? null,
         autoLocation:{
             type:"Point",
             coordinates:[longitudeNumber, latitudeNumber],
@@ -204,7 +218,7 @@ export const updateBusinessLocation = TryCatch(async(req:AuthenticatedRequest, r
 
 
 export const getNearbyBusiness = TryCatch(async(req, res) => {
-    const { latitude, longitude, radius=5000, search="" } = req.query;
+    const { latitude, longitude, radius=2000, search="", categoryId } = req.query;
     if(!latitude || !longitude){
         return res.status(400).json({
             message:"Latitude and Longitude are required",
@@ -215,6 +229,9 @@ export const getNearbyBusiness = TryCatch(async(req, res) => {
     }
     if(search && typeof search === "string"){
         query.name = {$regex : search, $option : "i"};
+    }
+    if(categoryId && typeof categoryId === "string" && categoryId.trim()){
+        query.categoryId = categoryId.trim();
     }
     const businesses = await business.aggregate([
         {

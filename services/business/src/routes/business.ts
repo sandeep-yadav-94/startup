@@ -10,7 +10,7 @@ router.get("/my", isAuth, isMerchant, fetchMyBusiness);
 router.put("/edit", isAuth, isMerchant, editBusiness);
 router.put("/location", isAuth, isMerchant, updateBusinessLocation);
 router.put("/status", isAuth, isMerchant, updateBusinessStatus);
-router.get("/all", isAuth, getNearbyBusiness);
+router.get("/all", getNearbyBusiness);
 router.get("/:id", isAuth, fetchSingleBusiness); 
 
 

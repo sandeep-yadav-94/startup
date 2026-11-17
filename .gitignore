@@ -6,6 +6,18 @@ node_modules/
 .env.*
 !.env.example
 !.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+!credentials*.example.json
+service-account*.json
+!service-account*.example.json
+secrets*.json
+!secrets*.example.json
+.npmrc
+!.npmrc.example
 
 # Build output
 dist/

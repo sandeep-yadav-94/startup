@@ -4,18 +4,25 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { authService } from "../config";
 import { motion, useReducedMotion } from "framer-motion";
-import { FiCheck, FiCompass, FiMapPin, FiShoppingBag } from "react-icons/fi";
+import { FiCheck, FiCompass, FiMapPin, FiMoreVertical, FiShoppingBag } from "react-icons/fi";
 
 
-type Role = "customer" | "rider" | "merchant" | null;
+type Role = "customer" | "rider" | "merchant";
 
 const SelectRole = () => {
 
-    const [role, setRole] = useState<Role>(null);
+    const [role, setRole] = useState<Role>("customer");
+    const [roleMenuOpen, setRoleMenuOpen] = useState(false);
     const {setUser} = useAppData();
     const navigate = useNavigate();
     const shouldReduceMotion = useReducedMotion();
-    const roles:Role[] = ["customer", "rider",  "merchant"];
+    const RoleIcon = role === "rider" ? FiMapPin : role === "merchant" ? FiShoppingBag : FiCompass;
+    const roleTitle = role === "rider" ? "Deliver as a rider" : role === "merchant" ? "Join as a merchant" : "Explore as a customer";
+    const roleDescription = role === "rider"
+        ? "Bring great local finds right to people."
+        : role === "merchant"
+            ? "Put your local business on the map."
+            : "Find local favorites for your taste and budget.";
 
     const addRole = async()=>{
         try {
@@ -106,6 +113,51 @@ const SelectRole = () => {
                 }}
             >
                 <div className="w-full max-w-lg">
+                    <div className="mb-5">
+                        <div className="flex justify-end">
+                            <button
+                                type="button"
+                                aria-label="More sign-up options"
+                                aria-haspopup="menu"
+                                aria-expanded={roleMenuOpen}
+                                onClick={() => setRoleMenuOpen((open) => !open)}
+                                className="flex h-11 w-11 items-center justify-center rounded-full border border-[#DDDAD2] bg-white/90 text-[#625e55] shadow-sm transition hover:border-[#C1641F]/50 hover:bg-white hover:text-[#AF6028] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#D16616]/25"
+                            >
+                                <FiMoreVertical size={20} />
+                            </button>
+                        </div>
+                        {roleMenuOpen && (
+                            <div role="menu" aria-label="Choose account type" className="ml-auto mt-2 w-full max-w-64 rounded-2xl border border-[#e8e2d9] bg-white p-2 shadow-[0_18px_48px_-20px_rgba(48,42,36,0.35)]">
+                                <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#93897c]">Join Sushmap as</p>
+                                {role !== "customer" && (
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => { setRole("customer"); setRoleMenuOpen(false); }}
+                                        className="w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[#514d45] transition hover:bg-[#f7f4ee]"
+                                    >
+                                        Continue as a customer
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setRole("rider"); setRoleMenuOpen(false); }}
+                                    className={`w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:bg-[#f7f4ee] ${role === "rider" ? "bg-[#f7f4ee] text-[#AF6028]" : "text-[#514d45]"}`}
+                                >
+                                    Join as a rider
+                                </button>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setRole("merchant"); setRoleMenuOpen(false); }}
+                                    className={`w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium transition hover:bg-[#f7f4ee] ${role === "merchant" ? "bg-[#f7f4ee] text-[#AF6028]" : "text-[#514d45]"}`}
+                                >
+                                    Register as a merchant
+                                </button>
+                            </div>
+                        )}
+                    </div>
                     <div aria-hidden="true" className="mx-auto mb-5 h-1 w-10 rounded-full bg-[#DCDDD5] lg:hidden" />
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#C1641F]">
                         Your next local favorite
@@ -118,61 +170,29 @@ const SelectRole = () => {
                         Choose your role
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-[#746C63] sm:text-base">
-                        Pick how you want to experience Sushmap.
+                        {role === "customer"
+                            ? "You’ll join as a customer by default. Choose another option from the menu if needed."
+                            : "Your selected role will open its usual setup after you continue."}
                     </p>
 
-                    <div role="group" aria-labelledby="role-heading" className="mt-5 grid gap-2.5 sm:mt-7 sm:gap-3">
-                        {roles.map((r) => {
-                            const isSelected = role === r;
-                            const RoleIcon = r === "rider" ? FiMapPin : r === "merchant" ? FiShoppingBag : FiCompass;
-                            const title = r === "customer" ? "Explore as a customer" : r === "rider" ? "Deliver as a rider" : "Join as a merchant";
-                            const description = r === "customer"
-                                ? "Find local favorites for your taste and budget."
-                                : r === "rider"
-                                    ? "Bring great local finds right to people."
-                                    : "Put your local business on the map.";
-
-                            return (
-                                <motion.button
-                                    key={r}
-                                    type="button"
-                                    onClick={() => setRole(r)}
-                                    aria-pressed={isSelected}
-                                    whileHover={!shouldReduceMotion ? { y: -2 } : undefined}
-                                    whileTap={!shouldReduceMotion ? { scale: 0.99 } : undefined}
-                                    transition={{ type: "spring", stiffness: 420, damping: 28 }}
-                                    className={`group flex min-h-22 w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition-[border-color,background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#D16616]/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F4F5F0] sm:min-h-25 sm:gap-4 sm:p-4 motion-reduce:transition-none ${
-                                        isSelected
-                                            ? "border-[#C1641F] bg-[#FFEFD4]/80 shadow-[0_10px_28px_-20px_rgba(175,96,40,0.8)]"
-                                            : "border-[#DDDAD2] bg-white/80 hover:border-[#C1641F]/55 hover:bg-white hover:shadow-[0_12px_28px_-22px_rgba(175,96,40,0.65)]"
-                                    }`}
-                                >
-                                    <span
-                                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors sm:h-12 sm:w-12 ${
-                                            isSelected ? "bg-[#AF6028] text-[#FFEFD4]" : "bg-[#F4F5F0] text-[#AF6028] group-hover:bg-[#FFEFD4]"
-                                        }`}
-                                    >
-                                        <RoleIcon size={21} aria-hidden="true" />
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                        <span className="block text-sm font-semibold text-[#302A24] sm:text-base">
-                                            {title}
-                                        </span>
-                                        <span className="mt-0.5 block text-xs leading-4 text-[#746C63] sm:text-sm sm:leading-5">
-                                            {description}
-                                        </span>
-                                    </span>
-                                    <span
-                                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                                            isSelected ? "border-[#AF6028] bg-[#AF6028] text-white" : "border-[#CFCBC3] text-transparent"
-                                        }`}
-                                    >
-                                        <FiCheck size={14} aria-hidden="true" />
-                                    </span>
-                                </motion.button>
-                            );
-                        })}
-                    </div>
+                    <motion.div
+                        role="group"
+                        aria-labelledby="role-heading"
+                        className="mt-5 flex min-h-22 w-full items-center gap-3 rounded-2xl border border-[#C1641F] bg-[#FFEFD4]/80 p-3.5 text-left shadow-[0_10px_28px_-20px_rgba(175,96,40,0.8)] sm:mt-7 sm:min-h-25 sm:gap-4 sm:p-4"
+                        initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                    >
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#AF6028] text-[#FFEFD4] sm:h-12 sm:w-12">
+                            <RoleIcon size={21} aria-hidden="true" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-semibold text-[#302A24] sm:text-base">{roleTitle}</span>
+                            <span className="mt-0.5 block text-xs leading-4 text-[#746C63] sm:text-sm sm:leading-5">{roleDescription}</span>
+                        </span>
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#AF6028] bg-[#AF6028] text-white">
+                            <FiCheck size={14} aria-hidden="true" />
+                        </span>
+                    </motion.div>
 
                     <motion.button
                         disabled={!role}

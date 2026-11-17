@@ -7,7 +7,6 @@ import type { IBusiness, ICart, IServiceList } from "../types";
 import { toast } from "react-hot-toast/headless";
 import { utilsService } from "../main";
 import { BiCreditCard, BiLoader } from "react-icons/bi";
-import { s } from "framer-motion/client";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -41,7 +40,7 @@ const Checkout = () => {
         return;
       }
       try {
-        const { data } = await axios.get(`${businessService}/api/address/all`, {
+        const { data } = await axios.get(`${businessService}/api/address/all`, {   
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }

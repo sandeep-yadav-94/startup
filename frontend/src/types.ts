@@ -40,6 +40,8 @@ export interface IBusiness{
     ownerId:string;
     phone:number;
     isVerified:boolean;
+    categoryId?: string | null;
+    categoryName?: string | null;
 
     autoLocation:{
         type: "Point",

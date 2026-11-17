@@ -5,6 +5,8 @@ import TryCatch from "../middlewares/trycatch.js";
 import business from "../models/business.js";
 import ServiceList from "../models/ServiceList.js";
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const addServiceList = TryCatch(async(req:AuthenticatedRequest, res)=>{
 
     if(!req.user){
@@ -83,6 +85,108 @@ export const getAllServices = TryCatch(async(req:AuthenticatedRequest, res) => {
     res.json(services);
 
 })
+
+export const searchServices = TryCatch(async(req:AuthenticatedRequest, res) => {
+    const searchTerm = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const latitude = typeof req.query.latitude === "string" ? Number(req.query.latitude) : NaN;
+    const longitude = typeof req.query.longitude === "string" ? Number(req.query.longitude) : NaN;
+    const categoryId = typeof req.query.categoryId === "string" ? req.query.categoryId.trim() : "";
+
+    if (!searchTerm || searchTerm.length > 100) {
+        return res.status(400).json({ message: "A search term of up to 100 characters is required" });
+    }
+    if (
+        !Number.isFinite(latitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        !Number.isFinite(longitude) ||
+        longitude < -180 ||
+        longitude > 180
+    ) {
+        return res.status(400).json({ message: "Valid latitude and longitude are required" });
+    }
+
+    const searchPattern = new RegExp(escapeRegex(searchTerm), "i");
+    const businessQuery: Record<string, unknown> = { isVerified: true };
+    if (categoryId) businessQuery.categoryId = categoryId;
+
+    const nearbyBusinesses = await business.aggregate([
+        {
+            $geoNear: {
+                near: {
+                    type: "Point",
+                    coordinates: [longitude, latitude],
+                },
+                distanceField: "distanceMeters",
+                maxDistance: 2000,
+                spherical: true,
+                query: businessQuery,
+            },
+        },
+        {
+            $project: {
+                name: 1,
+                description: 1,
+                image: 1,
+                categoryName: 1,
+                isOpen: 1,
+                autoLocation: 1,
+                distanceMeters: 1,
+            },
+        },
+    ]);
+
+    if (nearbyBusinesses.length === 0) {
+        return res.json({ results: [] });
+    }
+
+    const matchingBusinessIds = nearbyBusinesses
+        .filter((entry) =>
+            searchPattern.test(entry.name ?? "") ||
+            searchPattern.test(entry.description ?? "") ||
+            searchPattern.test(entry.categoryName ?? ""),
+        )
+        .map((entry) => entry._id);
+    const serviceMatch: Record<string, unknown>[] = [
+        { name: searchPattern },
+        { description: searchPattern },
+    ];
+    if (matchingBusinessIds.length > 0) {
+        serviceMatch.push({ businessId: { $in: matchingBusinessIds } });
+    }
+
+    const services = await ServiceList.find({
+        businessId: { $in: nearbyBusinesses.map((entry) => entry._id) },
+        $or: serviceMatch,
+    })
+        .sort({ isAvailable: -1, createdAt: -1 })
+        .limit(60)
+        .lean();
+
+    const businessesById = new Map(
+        nearbyBusinesses.map((entry) => [entry._id.toString(), entry]),
+    );
+    const results = services.flatMap((service) => {
+        const matchedBusiness = businessesById.get(service.businessId.toString());
+        if (!matchedBusiness) return [];
+
+        return [{
+            ...service,
+            business: {
+                _id: matchedBusiness._id,
+                name: matchedBusiness.name,
+                description: matchedBusiness.description,
+                image: matchedBusiness.image,
+                categoryName: matchedBusiness.categoryName,
+                isOpen: matchedBusiness.isOpen,
+                autoLocation: matchedBusiness.autoLocation,
+                distanceKm: Number((matchedBusiness.distanceMeters / 1000).toFixed(2)),
+            },
+        }];
+    });
+
+    return res.json({ results });
+});
 
 
 export const deleteServiceList = TryCatch(async(req:AuthenticatedRequest, res) => {

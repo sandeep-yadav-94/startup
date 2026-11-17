@@ -4,6 +4,7 @@ import { FiArrowRight, FiCamera, FiCheck, FiCheckCircle, FiFileText, FiHome, FiI
 import { useAppData } from "../context/AppContext";
 import toast from "react-hot-toast";
 import { businessService } from "../config";
+import { BUSINESS_CATEGORIES } from "../config/businessCategories";
 import axios from "axios";
 import type { IBusiness } from "../types";
 
@@ -15,6 +16,7 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [phone, setPhone] = useState("");
+    const [selectedCategoryId, setSelectedCategoryId] = useState("");
     const [image, setImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -55,6 +57,10 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
             toast.error("Enter a phone number with 7 to 15 digits");
             return;
         }
+        if (!selectedCategoryId) {
+            toast.error("Choose a category for your business");
+            return;
+        }
         if (!image) {
             toast.error("Add a business photo to continue");
             return;
@@ -78,6 +84,8 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
         formData.append("formattedAddress", location.formattedAddress);
         formData.append("file", image);
         formData.append("phone", cleanPhone);
+        formData.append("categoryId", selectedCategoryId);
+        formData.append("categoryName", BUSINESS_CATEGORIES.find((category) => category.id === selectedCategoryId)?.name ?? "Other");
 
         try {
             setSubmitting(true);
@@ -108,11 +116,13 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
     };
 
     const phoneReady = /^\d{7,15}$/.test(phone.replace(/\D/g, ""));
+    const categoryReady = Boolean(selectedCategoryId);
     const readyDetails = [
         Boolean(name.trim()),
         phoneReady,
         Boolean(location),
         Boolean(image),
+        categoryReady,
     ].filter(Boolean).length;
 
     return (
@@ -177,10 +187,10 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
                         <div className="mt-8">
                             <div className="mb-3 flex items-center justify-between">
                                 <p className="text-[10px] font-bold tracking-[0.13em] text-[#747d77]">PROFILE CHECKLIST</p>
-                                <p className="font-mono text-[11px] font-semibold text-[#59635d]">{String(readyDetails).padStart(2, "0")} / 04</p>
+                                <p className="font-mono text-[11px] font-semibold text-[#59635d]">{String(readyDetails).padStart(2, "0")} / 05</p>
                             </div>
                             <div className="mb-3 h-1 overflow-hidden rounded-full bg-[#e4e8e4]">
-                                <motion.div initial={{ width: 0 }} animate={{ width: `${readyDetails * 25}%` }} transition={{ duration: 0.35 }} className="h-full rounded-full bg-[#e23744]" />
+                                <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min((readyDetails / 5) * 100, 100)}%` }} transition={{ duration: 0.35 }} className="h-full rounded-full bg-[#e23744]" />
                             </div>
                             <div className="divide-y divide-[#e8ebe8] border-y border-[#e8ebe8]">
                                 <div className="flex items-center gap-3 py-3">
@@ -194,12 +204,17 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
                                     <span className="text-[10px] font-medium text-[#89928c]">{phoneReady ? "READY" : "REQUIRED"}</span>
                                 </div>
                                 <div className="flex items-center gap-3 py-3">
-                                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${location ? "bg-[#eaf4ec] text-[#32814a]" : "bg-white text-[#808983] ring-1 ring-[#e2e6e2]"}`}>{location ? <FiCheck size={14} /> : "03"}</span>
+                                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${categoryReady ? "bg-[#eaf4ec] text-[#32814a]" : "bg-white text-[#808983] ring-1 ring-[#e2e6e2]"}`}>{categoryReady ? <FiCheck size={14} /> : "03"}</span>
+                                    <div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-[#323a35]">Business category</p><p className="mt-0.5 text-[11px] text-[#87908a]">Tell customers what you sell</p></div>
+                                    <span className="text-[10px] font-medium text-[#89928c]">{categoryReady ? "READY" : "REQUIRED"}</span>
+                                </div>
+                                <div className="flex items-center gap-3 py-3">
+                                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${location ? "bg-[#eaf4ec] text-[#32814a]" : "bg-white text-[#808983] ring-1 ring-[#e2e6e2]"}`}>{location ? <FiCheck size={14} /> : "04"}</span>
                                     <div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-[#323a35]">Location</p><p className="mt-0.5 truncate text-[11px] text-[#87908a]">{loadingLocation ? "Detecting your position" : location ? city : "Waiting for permission"}</p></div>
                                     <span className="text-[10px] font-medium text-[#89928c]">{location ? "READY" : "REQUIRED"}</span>
                                 </div>
                                 <div className="flex items-center gap-3 py-3">
-                                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${image ? "bg-[#eaf4ec] text-[#32814a]" : "bg-white text-[#808983] ring-1 ring-[#e2e6e2]"}`}>{image ? <FiCheck size={14} /> : "04"}</span>
+                                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${image ? "bg-[#eaf4ec] text-[#32814a]" : "bg-white text-[#808983] ring-1 ring-[#e2e6e2]"}`}>{image ? <FiCheck size={14} /> : "05"}</span>
                                     <div className="min-w-0 flex-1"><p className="text-[13px] font-semibold text-[#323a35]">Cover photo</p><p className="mt-0.5 text-[11px] text-[#87908a]">Help people recognize you</p></div>
                                     <span className="text-[10px] font-medium text-[#89928c]">{image ? "READY" : "REQUIRED"}</span>
                                 </div>
@@ -297,6 +312,37 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
                                                     <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} rows={3} placeholder="What should people know about your place?" className="w-full resize-y rounded-lg border border-[#dfe3dd] bg-white py-3 pr-3 pl-10 text-sm leading-5 outline-none transition placeholder:text-[#a3aaa5] focus:border-[#e23744] focus:ring-3 focus:ring-[#e23744]/10" />
                                                 </span>
                                             </label>
+                                        </div>
+
+                                        <div>
+                                            <div className="mb-3 flex items-center justify-between gap-3">
+                                                <span className="text-sm font-semibold">Business category <span className="text-[#e23744]">*</span></span>
+                                                <span className="text-xs text-[#969e98]">Choose the best match</span>
+                                            </div>
+                                            <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                                                {BUSINESS_CATEGORIES.map((category) => {
+                                                    const isSelected = selectedCategoryId === category.id;
+                                                    return (
+                                                        <button
+                                                            key={category.id}
+                                                            type="button"
+                                                            onClick={() => setSelectedCategoryId(category.id)}
+                                                            className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+                                                                isSelected
+                                                                    ? "border-[#e23744] bg-[#fff3f2] shadow-[0_8px_24px_-18px_rgba(226,55,68,0.85)]"
+                                                                    : "border-[#e4e8e5] bg-white hover:border-[#d7ddd9] hover:bg-[#fafbfa]"
+                                                            }`}
+                                                        >
+                                                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f6f1ee] text-lg">{category.icon}</span>
+                                                            <span className="min-w-0">
+                                                                <span className="block text-[12px] font-semibold text-[#2d3532]">{category.name}</span>
+                                                                <span className="block text-[10px] text-[#7d867f]">{category.group}</span>
+                                                            </span>
+                                                            {isSelected && <span className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#e23744] text-[10px] font-bold text-white">✓</span>}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
 
                                         <div>
