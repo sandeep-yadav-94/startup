@@ -11,6 +11,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useAppData } from "../context/AppContext";
 import type { User } from "../types";
 import { FiMoreVertical } from "react-icons/fi";
+import logo from "../assets/logo.png";
 
 
 
@@ -108,8 +109,8 @@ const Login = () => {
             >
                 <div className="mx-auto flex w-full max-w-xl items-center gap-4 lg:mx-0 lg:block">
                     <img
-                        src="/Sushmap.jpg"
-                        alt="Sushmap map pin, flame, and compass logo"
+                        src={logo}
+                        alt="SanX logo"
                         className="h-16 w-16 shrink-0 object-contain sm:h-18 sm:w-18 lg:mb-5 lg:h-24 lg:w-24"
                     />
                     <div>
@@ -117,7 +118,7 @@ const Login = () => {
                             className="text-4xl font-semibold leading-none text-[#AF6028] sm:text-5xl lg:text-6xl"
                             style={{ fontFamily: "'Fraunces', Georgia, serif" }}
                         >
-                            Sushmap
+                            SanX
                         </h1>
                         <p className="mt-1 text-xs font-medium leading-5 text-[#51483F] sm:text-sm lg:mt-5 lg:text-2xl lg:leading-relaxed">
                             Places. Tastes. Budgets. Found.
@@ -160,7 +161,7 @@ const Login = () => {
                         </div>
                         {roleMenuOpen && (
                             <div role="menu" aria-label="Choose account type" className="ml-auto mt-2 w-full max-w-64 rounded-2xl border border-[#e8e2d9] bg-white p-2 shadow-[0_18px_48px_-20px_rgba(48,42,36,0.35)]">
-                                <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#93897c]">Join Sushmap as</p>
+                                <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#93897c]">Join SanX as</p>
                                 {selectedRole !== "customer" && (
                                     <button
                                         type="button"

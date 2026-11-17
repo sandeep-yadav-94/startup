@@ -1,7 +1,7 @@
 {
   "name": "admin",
   "version": "1.0.0",
-  "description": "Sushmap admin verification service",
+  "description": "SanX admin verification service",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

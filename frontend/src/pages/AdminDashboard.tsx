@@ -29,6 +29,7 @@ import { motion } from "framer-motion";
 import { adminService } from "../config";
 import { useAppData } from "../context/AppContext";
 import { useNavigate } from "react-router-dom";
+import logo from "../assets/logo.png";
 
 type ReviewTab = "pending" | "verified";
 
@@ -335,11 +336,9 @@ const AdminDashboard = () => {
       <header className="border-b border-white/10 bg-[#25211D] text-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-5 sm:px-7">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#AF6028] text-xl">
-              <FiShield aria-hidden="true" />
-            </span>
+            <img src={logo} alt="SanX logo" className="h-11 w-11 rounded-2xl bg-white object-contain p-1" />
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#DDA77D]">Sushmap</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#DDA77D]">SanX</p>
               <h1 className="text-xl font-semibold">Admin workspace</h1>
             </div>
           </div>
@@ -422,7 +421,7 @@ const AdminDashboard = () => {
             <h3 className="mt-1 text-2xl font-semibold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
               Verification center
             </h3>
-            <p className="mt-1 text-sm text-[#746C63]">Review business and rider profiles before they join the Sushmap network.</p>
+            <p className="mt-1 text-sm text-[#746C63]">Review business and rider profiles before they join the SanX network.</p>
           </div>
           <button
             type="button"

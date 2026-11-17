@@ -30,6 +30,7 @@ import {
 import { motion, useReducedMotion } from "framer-motion";
 import type { IOrder } from "../types";
 import audio from "../assets/mangaletp-funny-laughing-406018.mp3";
+import logo from "../assets/logo.png";
 import RiderOrderRequest from "../components/RiderOrderRequest";
 import RiderOrderMap from "../components/RiderOrderMap";
 
@@ -456,13 +457,13 @@ if (!profile) {
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/Sushmap.jpg" alt="Sushmap" className="h-11 w-11 object-contain" />
+            <img src={logo} alt="SanX logo" className="h-11 w-11 object-contain" />
             <div>
               <p
                 className="text-xl font-semibold leading-5 text-[#557A69]"
                 style={{ fontFamily: "'Fraunces', Georgia, serif" }}
               >
-                Sushmap
+                SanX
               </p>
               <p className="mt-1 text-[10px] font-semibold tracking-[0.16em] text-[#839087]">
                 RIDER PARTNER
@@ -502,7 +503,7 @@ if (!profile) {
                 Make every delivery count.
               </h1>
               <p className="mt-4 max-w-sm text-sm leading-7 text-white/65">
-                Join the Sushmap rider network and bring great local experiences closer to everyone.
+                Join the SanX rider network and bring great local experiences closer to everyone.
               </p>
 
               <div className="mt-9 space-y-4">
@@ -789,9 +790,9 @@ if (!profile) {
       <div className="mx-auto max-w-7xl px-4 sm:px-7">
         <header className="flex items-center justify-between border-b border-[#E6EAE4] py-4">
           <div className="flex items-center gap-3">
-            <img src="/Sushmap.jpg" alt="Sushmap" className="h-10 w-10 object-contain" />
+            <img src={logo} alt="SanX logo" className="h-10 w-10 object-contain" />
             <div>
-              <p className="text-lg font-bold leading-5 tracking-tight text-[#3E6A55]" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>Sushmap</p>
+              <p className="text-lg font-bold leading-5 tracking-tight text-[#3E6A55]" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>SanX</p>
               <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#839087]">Rider workspace</p>
             </div>
           </div>

@@ -7,6 +7,7 @@ import { businessService } from "../config";
 import { BUSINESS_CATEGORIES } from "../config/businessCategories";
 import axios from "axios";
 import type { IBusiness } from "../types";
+import logo from "../assets/logo.png";
 
 interface props {
     fetchmyBusiness :()=> Promise<void>;
@@ -16,6 +17,10 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [phone, setPhone] = useState("");
+    const [accountNumber, setAccountNumber] = useState("");
+    const [ifscCode, setIfscCode] = useState("");
+    const [upiId, setUpiId] = useState("");
+    const [upiQrCode, setUpiQrCode] = useState<File | null>(null);
     const [selectedCategoryId, setSelectedCategoryId] = useState("");
     const [image, setImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -61,6 +66,23 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
             toast.error("Choose a category for your business");
             return;
         }
+        if (!/^\d{6,20}$/.test(accountNumber.trim())) {
+            toast.error("Enter a valid bank account number");
+            return;
+        }
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode.trim().toUpperCase())) {
+            toast.error("Enter a valid IFSC code");
+            return;
+        }
+        const cleanUpiId = upiId.trim();
+        if (cleanUpiId && !/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(cleanUpiId)) {
+            toast.error("Enter a valid UPI ID");
+            return;
+        }
+        if (!cleanUpiId && !upiQrCode) {
+            toast.error("Enter a UPI ID or upload your UPI QR code");
+            return;
+        }
         if (!image) {
             toast.error("Add a business photo to continue");
             return;
@@ -84,6 +106,10 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
         formData.append("formattedAddress", location.formattedAddress);
         formData.append("file", image);
         formData.append("phone", cleanPhone);
+        formData.append("accountNumber", accountNumber.trim());
+        formData.append("ifscCode", ifscCode.trim().toUpperCase());
+        if (cleanUpiId) formData.append("upiId", cleanUpiId);
+        if (upiQrCode) formData.append("upiQrCode", upiQrCode);
         formData.append("categoryId", selectedCategoryId);
         formData.append("categoryName", BUSINESS_CATEGORIES.find((category) => category.id === selectedCategoryId)?.name ?? "Other");
 
@@ -97,7 +123,7 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
             // console.log("Add business response:\n", JSON.stringify(data, null, 2));
             // console.log("Business ID:", data.business?._id ?? "missing from response");
             setCreatedBusiness(data.business);
-            toast.success("Your business is live on Sushmap");
+            toast.success("Your business is live on SanX");
             fetchmyBusiness();
         } catch (error: unknown) {
             const message = axios.isAxiosError<{ message?: string }>(error)
@@ -135,13 +161,13 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
             <div className="mx-auto max-w-7xl">
                 <header className="mb-5 flex items-center justify-between rounded-lg border border-[#e1e5e2] bg-white px-4 py-3 sm:px-5">
                     <div className="flex items-center gap-2.5">
-                        <img src="/Sushmap.jpg" alt="Sushmap logo" className="h-10 w-10 shrink-0 object-contain" />
+                        <img src={logo} alt="SanX logo" className="h-10 w-10 shrink-0 object-contain" />
                         <div>
-                            <span className="block text-xl leading-5 font-semibold text-[#AF6028]" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>Sushmap</span>
+                            <span className="block text-xl leading-5 font-semibold text-[#AF6028]" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>SanX</span>
                             <span className="hidden text-[10px] font-medium tracking-[0.12em] text-[#87908b] sm:block">MERCHANT CONSOLE</span>
                         </div>
                     </div>
-                    <span className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-[11px] font-semibold tracking-[0.08em] ${createdBusiness ? "border-[#d4e8d8] bg-[#f2f8f3] text-[#36824b]" : "border-[#e2e7e3] bg-[#f8faf8] text-[#68716c]"}`}><span className={`h-1.5 w-1.5 rounded-full ${createdBusiness ? "bg-[#43a663]" : "bg-[#e23744]"}`} />{createdBusiness ? "LIVE ON SUSHMAP" : "SETUP IN PROGRESS"}</span>
+                    <span className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-[11px] font-semibold tracking-[0.08em] ${createdBusiness ? "border-[#d4e8d8] bg-[#f2f8f3] text-[#36824b]" : "border-[#e2e7e3] bg-[#f8faf8] text-[#68716c]"}`}><span className={`h-1.5 w-1.5 rounded-full ${createdBusiness ? "bg-[#43a663]" : "bg-[#e23744]"}`} />{createdBusiness ? "LIVE ON SANX" : "SETUP IN PROGRESS"}</span>
                 </header>
 
                 <div className="grid overflow-hidden rounded-lg border border-[#e0e4e1] bg-white shadow-[0_18px_55px_-40px_rgba(25,35,30,0.32)] lg:min-h-172.5 lg:grid-cols-[300px_minmax(0,1fr)]">
@@ -169,7 +195,7 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
                                 </div>
                                 <div className="mt-auto border-t border-[#e4e8e4] pt-5">
                                     <p className="text-[10px] font-bold tracking-[0.12em] text-[#87908b]">PUBLISHED TO</p>
-                                    <p className="mt-1 text-sm font-semibold text-[#AF6028]">Sushmap <span className="font-normal text-[#737d77]">· Local discovery</span></p>
+                                    <p className="mt-1 text-sm font-semibold text-[#AF6028]">SanX <span className="font-normal text-[#737d77]">· Local discovery</span></p>
                                 </div>
                             </div>
                         ) : (
@@ -252,11 +278,11 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
                                 >
                                     <div className="flex items-center gap-3">
                                         <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#eaf5ec] text-[#33834a]"><FiCheck size={21} /></span>
-                                        <span className="inline-flex items-center gap-2 rounded-md border border-[#d4e8d8] bg-[#f5faf5] px-3 py-2 text-[10px] font-bold tracking-[0.1em] text-[#36824b]"><span className="h-1.5 w-1.5 rounded-full bg-[#43a663]" /> LIVE ON SUSHMAP</span>
+                                        <span className="inline-flex items-center gap-2 rounded-md border border-[#d4e8d8] bg-[#f5faf5] px-3 py-2 text-[10px] font-bold tracking-[0.1em] text-[#36824b]"><span className="h-1.5 w-1.5 rounded-full bg-[#43a663]" /> LIVE ON SANX</span>
                                     </div>
                                     <div className="mt-6">
                                         <p className="text-[10px] font-bold tracking-[0.15em] text-[#AF6028]">PROFILE PUBLISHED</p>
-                                        <h2 className="mt-2 text-3xl leading-tight font-semibold tracking-tight text-[#222926] sm:text-4xl">You're live on <span className="text-[#AF6028]">Sushmap.</span></h2>
+                                        <h2 className="mt-2 text-3xl leading-tight font-semibold tracking-tight text-[#222926] sm:text-4xl">You're live on <span className="text-[#AF6028]">SanX.</span></h2>
                                         <p className="mt-3 max-w-lg text-sm leading-6 text-[#707873]">Your business is now on the map. Here's how your listing is ready to appear to customers nearby.</p>
                                     </div>
                                     <div className="mt-7 overflow-hidden rounded-lg border border-[#e1e5e2] bg-white shadow-[0_12px_35px_-28px_rgba(25,35,30,0.5)] sm:flex">
@@ -264,7 +290,7 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
                                         <div className="flex min-w-0 flex-1 flex-col p-5 sm:p-6">
                                             <div className="flex flex-wrap items-center justify-between gap-2">
                                                 <span className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.1em] text-[#36824b]"><FiCheckCircle size={14} /> PUBLISHED LISTING</span>
-                                                <span className="rounded-md bg-[#f3f5f3] px-2 py-1 font-mono text-[10px] text-[#858e88]">SUSHMAP / LOCAL</span>
+                                                <span className="rounded-md bg-[#f3f5f3] px-2 py-1 font-mono text-[10px] text-[#858e88]">SANX / LOCAL</span>
                                             </div>
                                             <h3 className="mt-3 truncate text-xl font-semibold tracking-tight text-[#252d28]">{createdBusiness.name}</h3>
                                             {createdBusiness.description && <p className="mt-1 line-clamp-2 text-sm leading-5 text-[#737b76]">{createdBusiness.description}</p>}
@@ -282,7 +308,7 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
                                         <div>
                                             <p className="text-[10px] font-bold tracking-[0.15em] text-[#e23744]">BUSINESS PROFILE</p>
                                             <h2 className="mt-2 text-[25px] leading-tight font-semibold tracking-tight text-[#222926]">Your business details</h2>
-                                            <p className="mt-2 text-[13px] leading-5 text-[#737b76]">This information appears on your Sushmap listing.</p>
+                                            <p className="mt-2 text-[13px] leading-5 text-[#737b76]">This information appears on your SanX listing.</p>
                                         </div>
                                         <span className="hidden shrink-0 rounded-md border border-[#e3e7e3] px-2.5 py-1.5 font-mono text-[10px] font-medium text-[#7e8781] sm:block">01 / 01</span>
                                     </div>
@@ -313,6 +339,45 @@ const AddBusiness = ({fetchmyBusiness}:props) => {
                                                 </span>
                                             </label>
                                         </div>
+
+                                        <section className="space-y-4 rounded-lg border border-[#e7e9e4] bg-[#fafbf9] p-4">
+                                            <div>
+                                                <h3 className="text-sm font-semibold">Payout details</h3>
+                                                <p className="mt-1 text-xs text-[#858d87]">Add bank details and either a UPI ID or QR code.</p>
+                                            </div>
+                                            <div className="grid gap-4 sm:grid-cols-2">
+                                                <label className="block">
+                                                    <span className="mb-2 block text-sm font-semibold">Bank account number <span className="text-[#e23744]">*</span></span>
+                                                    <input value={accountNumber} onChange={(event) => setAccountNumber(event.target.value)} type="text" inputMode="numeric" autoComplete="off" maxLength={20} placeholder="Enter account number" className="h-11 w-full rounded-lg border border-[#dfe3dd] bg-white px-3 text-sm outline-none transition placeholder:text-[#a3aaa5] focus:border-[#e23744] focus:ring-3 focus:ring-[#e23744]/10" />
+                                                </label>
+                                                <label className="block">
+                                                    <span className="mb-2 block text-sm font-semibold">IFSC code <span className="text-[#e23744]">*</span></span>
+                                                    <input value={ifscCode} onChange={(event) => setIfscCode(event.target.value.toUpperCase())} type="text" autoComplete="off" maxLength={11} placeholder="e.g. HDFC0001234" className="h-11 w-full rounded-lg border border-[#dfe3dd] bg-white px-3 text-sm uppercase outline-none transition placeholder:text-[#a3aaa5] focus:border-[#e23744] focus:ring-3 focus:ring-[#e23744]/10" />
+                                                </label>
+                                                <label className="block">
+                                                    <span className="mb-2 block text-sm font-semibold">UPI ID <span className="text-xs font-normal text-[#969e98]">Optional if QR is uploaded</span></span>
+                                                    <input value={upiId} onChange={(event) => setUpiId(event.target.value)} type="text" autoComplete="off" placeholder="name@bank" className="h-11 w-full rounded-lg border border-[#dfe3dd] bg-white px-3 text-sm outline-none transition placeholder:text-[#a3aaa5] focus:border-[#e23744] focus:ring-3 focus:ring-[#e23744]/10" />
+                                                </label>
+                                                <label className="block">
+                                                    <span className="mb-2 block text-sm font-semibold">UPI QR code <span className="text-xs font-normal text-[#969e98]">Optional if UPI ID is entered</span></span>
+                                                    <input type="file" accept="image/*" onChange={(event) => {
+                                                        const file = event.target.files?.[0] ?? null;
+                                                        if (file && !file.type.startsWith("image/")) {
+                                                            toast.error("Choose an image file for your UPI QR code");
+                                                            event.target.value = "";
+                                                            return;
+                                                        }
+                                                        if (file && file.size > 5 * 1024 * 1024) {
+                                                            toast.error("UPI QR code must be 5 MB or smaller");
+                                                            event.target.value = "";
+                                                            return;
+                                                        }
+                                                        setUpiQrCode(file);
+                                                    }} className="block w-full text-xs text-[#626b65] file:mr-3 file:rounded-md file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#505953]" />
+                                                    {upiQrCode && <span className="mt-1 block truncate text-xs text-[#737b76]">{upiQrCode.name}</span>}
+                                                </label>
+                                            </div>
+                                        </section>
 
                                         <div>
                                             <div className="mb-3 flex items-center justify-between gap-3">

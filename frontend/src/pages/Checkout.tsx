@@ -7,6 +7,7 @@ import type { IBusiness, ICart, IServiceList } from "../types";
 import { toast } from "react-hot-toast/headless";
 import { utilsService } from "../main";
 import { BiCreditCard, BiLoader } from "react-icons/bi";
+import logo from "../assets/logo.png";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -122,7 +123,8 @@ const Checkout = () => {
         key,
         amount: Math.round(Number(totalAmount) * 100),
         currency: "INR",
-        name: "Sushmap Corp.",
+        name: "SanX Corp.",
+        image: logo,
         description: "Service booking Order Payment",
         order_id: razorpayOrderId,
         handler: async function (response: any) {

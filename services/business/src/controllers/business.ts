@@ -23,11 +23,32 @@ export const addBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
             message: "You already have a merchant account..",
         })
     }
-    const {name, description, latitude, longitude, formattedAddress, phone, categoryId, categoryName} = req.body;
+    const {name, description, latitude, longitude, formattedAddress, phone, categoryId, categoryName, accountNumber, ifscCode, upiId} = req.body;
     const latitudeNumber = Number(latitude);
     const longitudeNumber = Number(longitude);
     const phoneNumber = Number(phone);
+    const cleanAccountNumber = typeof accountNumber === "string" ? accountNumber.trim() : "";
+    const cleanIfscCode = typeof ifscCode === "string" ? ifscCode.trim().toUpperCase() : "";
+    const cleanUpiId = typeof upiId === "string" ? upiId.trim() : "";
+    const uploadedFiles = req.files;
+    const upiQrCodeFile = uploadedFiles && !Array.isArray(uploadedFiles) ? uploadedFiles.upiQrCode?.[0] : undefined;
     const selectedCategory = typeof categoryId === "string" ? getBusinessCategoryById(categoryId) : null;
+
+    if(!/^\d{6,20}$/.test(cleanAccountNumber) || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(cleanIfscCode)){
+        return res.status(400).json({
+            message:"Please provide a valid bank account number and IFSC code",
+        })
+    }
+    if(cleanUpiId && !/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(cleanUpiId)){
+        return res.status(400).json({
+            message:"Please provide a valid UPI ID",
+        })
+    }
+    if(!cleanUpiId && !upiQrCodeFile){
+        return res.status(400).json({
+            message:"Please provide a UPI ID or UPI QR code",
+        })
+    }
 
     if(categoryId !== undefined && categoryId !== null && categoryId !== "" && !selectedCategory){
         return res.status(400).json({
@@ -60,6 +81,24 @@ export const addBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
             message:"Failed to upload business image",
         })
     }
+    let upiQrCodeUrl: string | null = null;
+    if(upiQrCodeFile){
+        const qrBuffer = getBuffer(upiQrCodeFile);
+        if(!qrBuffer?.content){
+            return res.status(500).json({
+                message:"Failed to process UPI QR code",
+            })
+        }
+        const {data:qrUploadResult} = await axios.post(`${process.env.UTILS_SERVICE}/api/upload`, {
+            buffer:qrBuffer.content,
+        })
+        if(!qrUploadResult?.url){
+            return res.status(502).json({
+                message:"Failed to upload UPI QR code",
+            })
+        }
+        upiQrCodeUrl = qrUploadResult.url;
+    }
     const categoryValue = selectedCategory ? selectedCategory.name : undefined;
     const safeCategoryName = typeof categoryName === "string" && categoryName.trim() ? categoryName.trim() : categoryValue;
 
@@ -67,6 +106,10 @@ export const addBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
         name,
         description,
         phone:phoneNumber,
+        accountNumber:cleanAccountNumber,
+        ifscCode:cleanIfscCode,
+        upiId:cleanUpiId || null,
+        upiQrCode:upiQrCodeUrl,
         image:uploadResult.url,
         ownerId:user._id,
         categoryId: selectedCategory?.id ?? null,
@@ -77,13 +120,16 @@ export const addBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
             formattedAddress,
         }
     })
+    const publicBusiness = createdBusiness.toObject();
+    for (const field of ["accountNumber", "ifscCode", "upiId", "upiQrCode"]) {
+        Reflect.deleteProperty(publicBusiness, field);
+    }
     console.log("Business created successfully:", JSON.stringify({
         businessId: createdBusiness._id.toString(),
-        business: createdBusiness.toObject(),
-    }, null, 2));
+    }));
     return res.status(201).json({
         message:"Business created Successfully",
-        business:createdBusiness,
+        business:publicBusiness,
     })
 })
 
@@ -257,6 +303,14 @@ export const getNearbyBusiness = TryCatch(async(req, res) => {
                 distanceKm:{
                     $round:[{$divide : ["$distance", 1000]}, 2]
                 }
+            }
+        },
+        {
+            $project:{
+                accountNumber:0,
+                ifscCode:0,
+                upiId:0,
+                upiQrCode:0,
             }
         }
     ])

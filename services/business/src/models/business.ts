@@ -6,6 +6,10 @@ export interface IBusiness extends Document {
     image:string;
     ownerId:string;
     phone:number;
+    accountNumber:string;
+    ifscCode:string;
+    upiId?:string | null;
+    upiQrCode?:string | null;
     isVerified:boolean;
     categoryId?: string | null;
     categoryName?: string | null;
@@ -38,6 +42,29 @@ const schema = new Schema<IBusiness>({
     phone:{
         type:Number,
         required:true
+    },
+    accountNumber:{
+        type:String,
+        required:true,
+        trim:true,
+        select:false,
+    },
+    ifscCode:{
+        type:String,
+        required:true,
+        trim:true,
+        select:false,
+    },
+    upiId:{
+        type:String,
+        default:null,
+        trim:true,
+        select:false,
+    },
+    upiQrCode:{
+        type:String,
+        default:null,
+        select:false,
     },
     categoryId:{
         type:String,

@@ -3,6 +3,7 @@ import { useAppData } from "../context/AppContext";
 import { useEffect, useState } from "react";
 import { CgShoppingCart } from "react-icons/cg";
 import { BiMapPin, BiSearch } from "react-icons/bi";
+import logo from "../assets/logo.png";
 
 
 const Navbar = () => {
@@ -30,9 +31,10 @@ const Navbar = () => {
 
         <Link
           to="/"
-          className="text-2xl font-bold text-[#E23744] cursor-pointer"
+          className="inline-flex cursor-pointer items-center gap-2 text-2xl font-bold text-[#E23744]"
         >
-          Sushmap
+          <img src={logo} alt="" className="h-8 w-8 object-contain" />
+          SanX
         </Link>
 
         <div className="flex items-center gap-4">

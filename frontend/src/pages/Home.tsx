@@ -400,7 +400,7 @@ const Home = () => {
             <div className="mx-auto flex max-w-lg flex-col items-center rounded-3xl border border-dashed border-[#ddd6ca] bg-white/70 px-6 py-12 text-center">
               <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3eee5] text-[#9b7959]"><FiSearch size={24} /></span>
               <p className="mt-5 text-lg font-semibold text-[#34312b]">No local spots found just yet</p>
-              <p className="mt-2 max-w-sm text-sm leading-6 text-[#77736a]">There aren't any listed businesses around this location right now. Try again later as new neighbourhoods join Sushmap.</p>
+              <p className="mt-2 max-w-sm text-sm leading-6 text-[#77736a]">There aren't any listed businesses around this location right now. Try again later as new neighbourhoods join SanX.</p>
             </div>
           )}
         </div>

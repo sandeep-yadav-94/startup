@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { businessService } from "../config";
 import { useAppData } from "../context/AppContext";
 import type { IBusiness } from "../types";
+import logo from "../assets/logo.png";
 
 interface Props {
     business: IBusiness;
@@ -155,9 +156,9 @@ const BusinessProfile = ({ business, isMerchant, onUpdate }: Props) => {
             <div className="mx-auto max-w-7xl">
                 <header className="mb-5 flex items-center justify-between rounded-lg border border-[#e0e5e1] bg-white px-4 py-3 sm:px-5">
                     <div className="flex items-center gap-2.5">
-                        <img src="/Sushmap.jpg" alt="Sushmap logo" className="h-10 w-10 object-contain" />
+                        <img src={logo} alt="SanX logo" className="h-10 w-10 object-contain" />
                         <div>
-                            <p className="text-xl leading-5 font-semibold text-[#AF6028]" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>Sushmap</p>
+                            <p className="text-xl leading-5 font-semibold text-[#AF6028]" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>SanX</p>
                             <p className="mt-1 text-[9px] font-semibold tracking-[0.14em] text-[#858e88]">MERCHANT CONSOLE</p>
                         </div>
                     </div>
@@ -183,7 +184,7 @@ const BusinessProfile = ({ business, isMerchant, onUpdate }: Props) => {
                         </div>
 
                         <div className="max-w-3xl">
-                            <p className="mb-3 text-[10px] font-bold tracking-[0.16em] text-white/60">YOUR BUSINESS ON SUSHMAP</p>
+                            <p className="mb-3 text-[10px] font-bold tracking-[0.16em] text-white/60">YOUR BUSINESS ON SANX</p>
                             {editMode ? (
                                 <input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} aria-label="Business name" className="w-full rounded-md border border-white/25 bg-black/20 px-3 py-2 text-3xl font-semibold text-white outline-none placeholder:text-white/50 focus:border-white/60 sm:text-4xl" />
                             ) : (
@@ -229,7 +230,7 @@ const BusinessProfile = ({ business, isMerchant, onUpdate }: Props) => {
                         <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-[#28312b]"><FiShield className={business.isVerified ? "text-[#36824b]" : "text-[#AF6028]"} size={16} />{business.isVerified ? "Verified business" : "Verification pending"}</p>
                     </motion.div>
                     <motion.div variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0 } }} className="bg-white px-5 py-4 sm:px-6">
-                        <p className="text-[10px] font-bold tracking-[0.12em] text-[#87908a]">ON SUSHMAP SINCE</p>
+                        <p className="text-[10px] font-bold tracking-[0.12em] text-[#87908a]">ON SANX SINCE</p>
                         <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-[#28312b]"><FiCalendar className="text-[#AF6028]" size={16} />{createdLabel}</p>
                     </motion.div>
                 </motion.section>
