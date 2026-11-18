@@ -172,6 +172,81 @@ export const fetchMyBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
     })
 })
 
+export const getBusinessPayoutDetails = TryCatch(async(req:AuthenticatedRequest, res)=>{
+    const user = req.user;
+    if(!user || user.role !== "merchant"){
+        return res.status(403).json({message:"Merchant access required"});
+    }
+
+    const merchantBusiness = await business.findOne({ownerId:user._id}).select(
+        "+accountNumber +ifscCode +upiId +upiQrCode",
+    );
+    if(!merchantBusiness){
+        return res.status(404).json({message:"Business not found"});
+    }
+
+    return res.json({
+        accountNumber:merchantBusiness.accountNumber ?? "",
+        ifscCode:merchantBusiness.ifscCode ?? "",
+        upiId:merchantBusiness.upiId ?? "",
+        upiQrCode:merchantBusiness.upiQrCode ?? null,
+    });
+});
+
+export const updateBusinessPayoutDetails = TryCatch(async(req:AuthenticatedRequest, res)=>{
+    const user = req.user;
+    if(!user || user.role !== "merchant"){
+        return res.status(403).json({message:"Merchant access required"});
+    }
+
+    const accountNumber = typeof req.body.accountNumber === "string" ? req.body.accountNumber.trim() : "";
+    const ifscCode = typeof req.body.ifscCode === "string" ? req.body.ifscCode.trim().toUpperCase() : "";
+    const upiId = typeof req.body.upiId === "string" ? req.body.upiId.trim() : "";
+    const files = req.files;
+    const upiQrCodeFile = files && !Array.isArray(files) ? files.upiQrCode?.[0] : undefined;
+
+    if(!/^\d{6,20}$/.test(accountNumber) || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)){
+        return res.status(400).json({message:"Please provide a valid bank account number and IFSC code"});
+    }
+    if(upiId && !/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(upiId)){
+        return res.status(400).json({message:"Please provide a valid UPI ID"});
+    }
+
+    const merchantBusiness = await business.findOne({ownerId:user._id}).select("+upiQrCode");
+    if(!merchantBusiness){
+        return res.status(404).json({message:"Business not found"});
+    }
+    if(!upiId && !upiQrCodeFile && !merchantBusiness.upiQrCode){
+        return res.status(400).json({message:"Please provide a UPI ID or UPI QR code"});
+    }
+
+    let upiQrCodeUrl = merchantBusiness.upiQrCode ?? null;
+    if(upiQrCodeFile){
+        const qrBuffer = getBuffer(upiQrCodeFile);
+        if(!qrBuffer?.content){
+            return res.status(500).json({message:"Failed to process UPI QR code"});
+        }
+        const {data:uploadResult} = await axios.post(`${process.env.UTILS_SERVICE}/api/upload`, {
+            buffer:qrBuffer.content,
+        });
+        if(typeof uploadResult?.url !== "string" || !uploadResult.url){
+            return res.status(502).json({message:"Failed to upload UPI QR code"});
+        }
+        upiQrCodeUrl = uploadResult.url;
+    }
+
+    merchantBusiness.accountNumber = accountNumber;
+    merchantBusiness.ifscCode = ifscCode;
+    merchantBusiness.upiId = upiId || null;
+    merchantBusiness.upiQrCode = upiQrCodeUrl;
+    await merchantBusiness.save();
+
+    return res.json({
+        message:"Payout details saved",
+        upiQrCode:merchantBusiness.upiQrCode ?? null,
+    });
+});
+
 export const editBusiness = TryCatch(async(req:AuthenticatedRequest, res)=>{
     const user = req.user;
     if(!user){

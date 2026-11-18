@@ -1,12 +1,14 @@
 import express from 'express';
 import { isAuth, isMerchant } from '../middlewares/isAuth.js';
 import uploadFile from '../middlewares/multer.js';
-import { addBusiness, editBusiness, fetchMyBusiness, fetchSingleBusiness, getNearbyBusiness, updateBusinessLocation, updateBusinessStatus } from '../controllers/business.js';
+import { addBusiness, editBusiness, fetchMyBusiness, fetchSingleBusiness, getBusinessPayoutDetails, getNearbyBusiness, updateBusinessLocation, updateBusinessPayoutDetails, updateBusinessStatus } from '../controllers/business.js';
 
 const router = express.Router();
 
 router.post("/new", isAuth, isMerchant, uploadFile, addBusiness);
 router.get("/my", isAuth, isMerchant, fetchMyBusiness);
+router.get("/payout", isAuth, isMerchant, getBusinessPayoutDetails);
+router.put("/payout", isAuth, isMerchant, uploadFile, updateBusinessPayoutDetails);
 router.put("/edit", isAuth, isMerchant, editBusiness);
 router.put("/location", isAuth, isMerchant, updateBusinessLocation);
 router.put("/status", isAuth, isMerchant, updateBusinessStatus);

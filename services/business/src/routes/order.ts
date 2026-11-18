@@ -1,10 +1,12 @@
 import express from "express";
 import { isAuth, isMerchant } from "../middlewares/isAuth.js";
-import { assignRiderToOrder, createOrder, fetchBusinessOrders, fetchOrderForPayment, fetchSingleOrder, getCurrentOrdersForRider, getMyOrders, updateOrderStatus, updateOrderStatusRider } from "../controllers/order.js";
+import { assignRiderToOrder, createOrder, fetchBusinessOrders, fetchOrderForPayment, fetchSingleOrder, getCurrentOrdersForRider, getMerchantEarnings, getMyOrders, getRiderEarnings, updateOrderStatus, updateOrderStatusRider } from "../controllers/order.js";
 
 const router = express.Router();
 
 router.post("/new", isAuth, createOrder);
+router.get("/earnings/merchant", isAuth, isMerchant, getMerchantEarnings);
+router.get("/earnings/rider", isAuth, getRiderEarnings);
 router.get("/payment/:orderId", fetchOrderForPayment);
 router.get("/all/:businessId", isAuth, isMerchant, fetchBusinessOrders);
 router.put("/:orderId", isAuth, isMerchant, updateOrderStatus);

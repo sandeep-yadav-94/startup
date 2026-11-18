@@ -72,7 +72,7 @@ const Checkout = () => {
 
   const deliveryFee = 5 + (subTotal * 0.02);
 
-  const platformFee = 1;
+  const platformFee = 1 + (subTotal * 0.025);
 
   const grandTotal = subTotal + deliveryFee + platformFee;
 
@@ -228,20 +228,16 @@ const Checkout = () => {
         </div>
 
         <div className="flex justify-between items-center py-2">
-          <p className="text-gray-600">Delivery Fee</p>
+          <p className="text-gray-600">Delivery Fee (Rider's share)</p>
           <p className="text-gray-600">{deliveryFee === 0 ? 'Free' : `₹${deliveryFee}`}</p>
         </div>
 
         <div className="flex justify-between items-center py-2">
-          <p className="text-gray-600">Platform Fee 1₹</p>
+          <p className="text-gray-600">Platform Fee (Your share)</p>
           <p className="text-gray-600">₹{platformFee.toFixed(2)}</p>
         </div>
 
-        {
-          subTotal < 250 && (
-            <p className="text-red-500 text-sm">Note: delivery fees = 5 + {subTotal * 0.02}.</p>
-          )
-        }
+        <p className="text-gray-500 text-xs">Delivery fee: ₹5 + 2% of subtotal · Platform fee: ₹1 + 2.5% of subtotal</p>
 
         <div className="flex justify-between items-center py-2 font-semibold">
           <p className="text-gray-600">Grand Total</p>

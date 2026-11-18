@@ -9,11 +9,38 @@ import OrderCart from "./OrderCart";
 
 type BookingFilter = "all" | "active" | "completed" | "cancelled";
 
+interface MerchantEarnings {
+  window: { start: string; end: string };
+  summary: {
+    orderCount: number;
+    grossSales: number;
+    platformCommission: number;
+    netEarnings: number;
+    settledAmount: number;
+    pendingSettlement: number;
+  };
+}
+
+const formatEarningWindow = (window: MerchantEarnings["window"]) => {
+  const formatter = new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  });
+  return `${formatter.format(new Date(window.start))} – ${formatter.format(new Date(window.end))} IST`;
+};
+
 const ACTIVE_STATUSES = ["placed", "accepted", "preparing", "ready_for_rider", "wait for rider", "rider_assigned", "reached", "picked_up"];
 const formatCurrency = (amount: number) => new Intl.NumberFormat("en-IN", {
   style: "currency",
   currency: "INR",
   maximumFractionDigits: 0,
+}).format(amount);
+const formatEarningsCurrency = (amount: number) => new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 }).format(amount);
 
 const getBookingLoadError = (error: unknown) => {
@@ -46,12 +73,33 @@ const BusinessOrders = ({ businessId }: { businessId: string }) => {
   const [filter, setFilter] = useState<BookingFilter>("all");
   const [search, setSearch] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [earnings, setEarnings] = useState<MerchantEarnings | null>(null);
+  const [earningsError, setEarningsError] = useState("");
   const { socket } = useSocket();
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     audioRef.current = new Audio(audio);
     audioRef.current.load();
+  }, []);
+
+  const fetchEarnings = useCallback(async () => {
+    const token = localStorage.getItem("token");
+    if (!token?.trim()) {
+      setEarningsError("Sign in again to view your earnings.");
+      return;
+    }
+
+    try {
+      const { data } = await axios.get<MerchantEarnings>(`${businessService}/api/order/earnings/merchant`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setEarnings(data);
+      setEarningsError("");
+    } catch (error: unknown) {
+      console.error("Failed to fetch merchant earnings:", error);
+      setEarningsError("Your daily earnings could not be loaded. Please refresh.");
+    }
   }, []);
 
   const fetchOrders = useCallback(async () => {
@@ -69,6 +117,7 @@ const BusinessOrders = ({ businessId }: { businessId: string }) => {
       });
       setOrders(data.orders || []);
       setLoadError("");
+      void fetchEarnings();
     } catch (error) {
       if (axios.isAxiosError<{ message?: string }>(error)) {
         console.error("Error fetching bookings:", {
@@ -83,11 +132,16 @@ const BusinessOrders = ({ businessId }: { businessId: string }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [businessId]);
+  }, [businessId, fetchEarnings]);
 
   useEffect(() => {
     void Promise.resolve().then(fetchOrders);
   }, [fetchOrders]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => void fetchEarnings(), 60_000);
+    return () => window.clearInterval(timer);
+  }, [fetchEarnings]);
 
   useEffect(() => {
     if (!socket) return;
@@ -220,10 +274,25 @@ const BusinessOrders = ({ businessId }: { businessId: string }) => {
 
         <div className="rounded-lg border border-[#e5e9e5] bg-[#26312a] p-5 text-white sm:p-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white/10 text-[#e9ad7e]"><FiArrowUpRight size={19} /></div>
-          <p className="mt-5 text-[10px] font-bold tracking-[0.14em] text-white/55">PAYOUTS</p>
-          <h3 className="mt-1 text-lg font-semibold">Payout tracking unavailable</h3>
-          <p className="mt-2 text-sm leading-6 text-white/65">This payment setup doesn’t provide payout or settlement records yet. Sales shown here are not a confirmed withdrawable balance.</p>
-          <div className="mt-4 flex items-center gap-2 border-t border-white/10 pt-4 text-xs text-white/75"><FiCalendar size={14} /> Settlement details will appear when connected.</div>
+          <p className="mt-5 text-[10px] font-bold tracking-[0.14em] text-white/55">DAILY EARNINGS · 10:40 PM CUTOFF</p>
+          {earningsError ? (
+            <p role="alert" className="mt-2 text-sm text-[#F3C1AE]">{earningsError}</p>
+          ) : earnings ? (
+            <>
+              <h3 className="mt-1 text-lg font-semibold">Your net earnings</h3>
+              <p className="mt-2 text-3xl font-semibold">{formatEarningsCurrency(earnings.summary.netEarnings)}</p>
+              <p className="mt-2 text-xs text-white/65">
+                Sales {formatEarningsCurrency(earnings.summary.grossSales)} · 2% platform commission −{formatEarningsCurrency(earnings.summary.platformCommission)}
+              </p>
+              <p className="mt-2 text-xs text-white/65">{earnings.summary.orderCount} paid and delivered bookings</p>
+              <div className="mt-4 flex items-start gap-2 border-t border-white/10 pt-4 text-xs leading-5 text-white/75">
+                <FiCalendar className="mt-0.5 shrink-0" size={14} />
+                <span>{formatEarningWindow(earnings.window)} · Settlement by admin after this window closes</span>
+              </div>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-white/65">Loading this window’s earnings…</p>
+          )}
         </div>
       </section>
 
@@ -265,7 +334,7 @@ const BusinessOrders = ({ businessId }: { businessId: string }) => {
         </div>
         <div className="flex items-start gap-2 border-t border-[#edf0ed] bg-[#fafbf9] px-5 py-3.5 text-[11px] leading-5 text-[#818a83] sm:px-6">
           <FiAlertCircle className="mt-0.5 shrink-0" size={14} />
-          <p>Sales are calculated from paid orders currently available in your booking history. Payout settlement, fees, and bank transfer status are not supplied by the payment service.</p>
+          <p>Daily earnings include only paid and delivered orders. The 2% platform commission is deducted from merchant item sales; the daily window runs from 10:40 PM to 10:40 PM India time. Admin records manual settlements after transferring funds.</p>
         </div>
       </section>
     </div>

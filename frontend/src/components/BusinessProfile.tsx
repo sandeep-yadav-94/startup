@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { FiCalendar, FiCheckCircle, FiEdit2, FiLoader, FiMapPin, FiPhone, FiRefreshCw, FiSave, FiShield, FiX } from "react-icons/fi";
+import { FiCalendar, FiCheckCircle, FiDollarSign, FiEdit2, FiLoader, FiMapPin, FiPhone, FiRefreshCw, FiSave, FiShield, FiX } from "react-icons/fi";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { businessService } from "../config";
@@ -24,7 +24,45 @@ const BusinessProfile = ({ business, isMerchant, onUpdate }: Props) => {
     const [updatingLocation, setUpdatingLocation] = useState(false);
     const [editingAddress, setEditingAddress] = useState(false);
     const [addressDraft, setAddressDraft] = useState(business.autoLocation.formattedAddress);
+    const [payoutLoading, setPayoutLoading] = useState(false);
+    const [payoutSaving, setPayoutSaving] = useState(false);
+    const [payoutError, setPayoutError] = useState("");
+    const [accountNumber, setAccountNumber] = useState("");
+    const [ifscCode, setIfscCode] = useState("");
+    const [upiId, setUpiId] = useState("");
+    const [upiQrCode, setUpiQrCode] = useState<File | null>(null);
+    const [savedUpiQrCode, setSavedUpiQrCode] = useState<string | null>(null);
     const { refreshLocation } = useAppData();
+
+    useEffect(() => {
+        if (!isMerchant) return;
+        let isCurrent = true;
+        setPayoutLoading(true);
+        void axios.get<{
+            accountNumber: string;
+            ifscCode: string;
+            upiId: string;
+            upiQrCode: string | null;
+        }>(`${businessService}/api/business/payout`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }).then(({ data }) => {
+            if (!isCurrent) return;
+            setAccountNumber(data.accountNumber);
+            setIfscCode(data.ifscCode);
+            setUpiId(data.upiId);
+            setSavedUpiQrCode(data.upiQrCode);
+            setPayoutError("");
+        }).catch((error: unknown) => {
+            if (!isCurrent) return;
+            console.error("Failed to load merchant payout details:", error);
+            setPayoutError("Payout details could not be loaded. Please refresh the page.");
+        }).finally(() => {
+            if (isCurrent) setPayoutLoading(false);
+        });
+        return () => {
+            isCurrent = false;
+        };
+    }, [isMerchant]);
 
     const startEditing = () => {
         setName(business.name);
@@ -138,6 +176,54 @@ const BusinessProfile = ({ business, isMerchant, onUpdate }: Props) => {
             toast.error(message || "Unable to save your business address");
         } finally {
             setUpdatingLocation(false);
+        }
+    };
+
+    const savePayoutDetails = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const cleanAccountNumber = accountNumber.trim();
+        const cleanIfscCode = ifscCode.trim().toUpperCase();
+        const cleanUpiId = upiId.trim();
+        if (!/^\d{6,20}$/.test(cleanAccountNumber)) {
+            toast.error("Enter a valid bank account number");
+            return;
+        }
+        if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(cleanIfscCode)) {
+            toast.error("Enter a valid IFSC code");
+            return;
+        }
+        if (cleanUpiId && !/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(cleanUpiId)) {
+            toast.error("Enter a valid UPI ID");
+            return;
+        }
+        if (!cleanUpiId && !upiQrCode && !savedUpiQrCode) {
+            toast.error("Provide a UPI ID or upload your UPI QR code");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("accountNumber", cleanAccountNumber);
+        formData.append("ifscCode", cleanIfscCode);
+        if (cleanUpiId) formData.append("upiId", cleanUpiId);
+        if (upiQrCode) formData.append("upiQrCode", upiQrCode);
+
+        try {
+            setPayoutSaving(true);
+            const { data } = await axios.put<{ message: string; upiQrCode: string | null }>(
+                `${businessService}/api/business/payout`,
+                formData,
+                { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } },
+            );
+            setSavedUpiQrCode(data.upiQrCode);
+            setUpiQrCode(null);
+            toast.success(data.message);
+        } catch (error: unknown) {
+            const message = axios.isAxiosError<{ message?: string }>(error)
+                ? error.response?.data?.message
+                : undefined;
+            toast.error(message || "Unable to save payout details");
+        } finally {
+            setPayoutSaving(false);
         }
     };
 
@@ -271,6 +357,67 @@ const BusinessProfile = ({ business, isMerchant, onUpdate }: Props) => {
                         </motion.section>
                     )}
                 </div>
+                {isMerchant && (
+                    <motion.section
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, delay: 0.28 }}
+                        className="mt-5 rounded-lg border border-[#e0e5e1] bg-white p-5 sm:p-6"
+                    >
+                        <div className="flex items-start gap-3 border-b border-[#edf0ed] pb-4">
+                            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-[#f8f2ed] text-[#AF6028]"><FiDollarSign /></span>
+                            <div>
+                                <p className="text-[10px] font-bold tracking-[0.13em] text-[#AF6028]">PAYOUT SETTINGS</p>
+                                <h2 className="mt-1 text-lg font-semibold text-[#28312b]">Where should your earnings be sent?</h2>
+                                <p className="mt-1 text-sm text-[#737b76]">These private details are only shown to you and the admin for settlement.</p>
+                            </div>
+                        </div>
+                        {payoutError && <p role="alert" className="mt-4 text-sm text-red-700">{payoutError}</p>}
+                        {payoutLoading ? (
+                            <p className="mt-4 text-sm text-[#737b76]">Loading payout details…</p>
+                        ) : (
+                            <form onSubmit={(event) => void savePayoutDetails(event)} className="mt-4 grid gap-4 sm:grid-cols-2">
+                                <label className="block">
+                                    <span className="mb-1.5 block text-sm font-semibold">Bank account number</span>
+                                    <input value={accountNumber} onChange={(event) => setAccountNumber(event.target.value)} inputMode="numeric" maxLength={20} autoComplete="off" className="h-11 w-full rounded-md border border-[#dce2dd] px-3 text-sm outline-none focus:border-[#AF6028]" />
+                                </label>
+                                <label className="block">
+                                    <span className="mb-1.5 block text-sm font-semibold">IFSC code</span>
+                                    <input value={ifscCode} onChange={(event) => setIfscCode(event.target.value.toUpperCase())} maxLength={11} autoComplete="off" className="h-11 w-full rounded-md border border-[#dce2dd] px-3 text-sm uppercase outline-none focus:border-[#AF6028]" />
+                                </label>
+                                <label className="block">
+                                    <span className="mb-1.5 block text-sm font-semibold">UPI ID <span className="font-normal text-[#858e88]">optional if QR is available</span></span>
+                                    <input value={upiId} onChange={(event) => setUpiId(event.target.value)} autoComplete="off" placeholder="name@bank" className="h-11 w-full rounded-md border border-[#dce2dd] px-3 text-sm outline-none focus:border-[#AF6028]" />
+                                </label>
+                                <label className="block">
+                                    <span className="mb-1.5 block text-sm font-semibold">UPI QR code <span className="font-normal text-[#858e88]">optional if UPI ID is available</span></span>
+                                    <input type="file" accept="image/*" onChange={(event) => {
+                                        const file = event.target.files?.[0] ?? null;
+                                        if (file && !file.type.startsWith("image/")) {
+                                            toast.error("Choose an image file for your UPI QR code");
+                                            event.target.value = "";
+                                            return;
+                                        }
+                                        if (file && file.size > 5 * 1024 * 1024) {
+                                            toast.error("UPI QR code must be 5 MB or smaller");
+                                            event.target.value = "";
+                                            return;
+                                        }
+                                        setUpiQrCode(file);
+                                    }} className="block w-full text-xs text-[#626b65] file:mr-3 file:rounded-md file:border-0 file:bg-[#f4f6f4] file:px-3 file:py-2 file:text-xs file:font-semibold" />
+                                    {savedUpiQrCode && <a href={savedUpiQrCode} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-semibold text-[#AF6028] underline">View saved QR</a>}
+                                    {upiQrCode && <span className="mt-2 block truncate text-xs text-[#737b76]">{upiQrCode.name}</span>}
+                                </label>
+                                <div className="sm:col-span-2">
+                                    <button type="submit" disabled={payoutSaving || payoutLoading} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[#36824b] px-4 text-sm font-semibold text-white disabled:opacity-60">
+                                        {payoutSaving ? <FiLoader className="animate-spin" /> : <FiSave />}
+                                        {payoutSaving ? "Saving payout details…" : "Save payout details"}
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </motion.section>
+                )}
             </div>
         </motion.main>
     );

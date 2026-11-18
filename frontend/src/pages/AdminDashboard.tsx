@@ -107,6 +107,44 @@ interface DashboardResponse {
   }>;
 }
 
+interface SettlementPayee {
+  id: string;
+  name: string;
+  owner?: string;
+  phoneNumber?: string | null;
+  orderCount?: number;
+  deliveryCount?: number;
+  grossSales?: number;
+  platformCommission?: number;
+  earnings: number;
+  settled: boolean;
+  settledAt: string | null;
+  reference: string | null;
+  payoutDetailsAvailable: boolean;
+  accountNumber: string | null;
+  ifscCode: string | null;
+  upiId: string | null;
+  upiQrCode: string | null;
+}
+
+interface SettlementOverview {
+  window: { start: string; end: string };
+  windows: Array<{ start: string; end: string; closed: boolean }>;
+  canSettle: boolean;
+  summary: {
+    orderCount: number;
+    grossSales: number;
+    deliveryFees: number;
+    merchantCommission: number;
+    customerPlatformFees: number;
+    platformEarnings: number;
+    pendingRiderSettlements: number;
+    pendingMerchantSettlements: number;
+  };
+  merchants: SettlementPayee[];
+  riders: SettlementPayee[];
+}
+
 interface AdminOrderDetails {
   order: {
     id: string;
@@ -218,6 +256,23 @@ const formatMoney = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount);
 
+const formatSettlementMoney = (amount: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+
+const formatSettlementWindow = (start: string, end: string) => {
+  const formatter = new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  });
+  return `${formatter.format(new Date(start))} – ${formatter.format(new Date(end))} IST`;
+};
+
 const maskNumber = (value: string | null | undefined) =>
   typeof value !== "string" || value.length === 0
     ? "Not provided"
@@ -241,6 +296,11 @@ const AdminDashboard = () => {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [settlementStart, setSettlementStart] = useState("");
+  const [settlementOverview, setSettlementOverview] = useState<SettlementOverview | null>(null);
+  const [settlementLoading, setSettlementLoading] = useState(true);
+  const [settlementError, setSettlementError] = useState<string | null>(null);
+  const [settlementAction, setSettlementAction] = useState<string | null>(null);
 
   const fetchDashboard = useCallback(async (days: number) => {
     setDashboardLoading(true);
@@ -282,6 +342,27 @@ const AdminDashboard = () => {
     }
   }, []);
 
+  const fetchSettlements = useCallback(async (start = "") => {
+    setSettlementLoading(true);
+    setSettlementError(null);
+    try {
+      const { data: response } = await axios.get<SettlementOverview>(
+        `${adminService}/api/admin/settlements`,
+        {
+          params: start ? { start } : {},
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        },
+      );
+      setSettlementOverview(response);
+      if (!start) setSettlementStart(response.window.start);
+    } catch (error: unknown) {
+      console.error("Failed to load settlement overview:", error);
+      setSettlementError(getErrorMessage(error));
+    } finally {
+      setSettlementLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void Promise.resolve().then(() => fetchReviews(tab));
   }, [fetchReviews, tab]);
@@ -289,6 +370,41 @@ const AdminDashboard = () => {
   useEffect(() => {
     void Promise.resolve().then(() => fetchDashboard(rangeDays));
   }, [fetchDashboard, rangeDays]);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => fetchSettlements(settlementStart));
+  }, [fetchSettlements, settlementStart]);
+
+  const settlePayee = async (
+    payee: SettlementPayee,
+    entityType: "merchant" | "rider",
+    reference: string,
+  ) => {
+    if (!settlementOverview || !settlementOverview.canSettle) {
+      toast.error("This earning window has not closed yet.");
+      return;
+    }
+    const key = `${entityType}:${payee.id}`;
+    setSettlementAction(key);
+    try {
+      await axios.post(
+        `${adminService}/api/admin/settlements`,
+        {
+          entityType,
+          entityId: payee.id,
+          periodStart: settlementOverview.window.start,
+          reference,
+        },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } },
+      );
+      toast.success(`${payee.name} settlement recorded.`);
+      await fetchSettlements(settlementOverview.window.start);
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setSettlementAction(null);
+    }
+  };
 
   const updateVerification = async (
     type: "business" | "rider",
@@ -412,6 +528,17 @@ const AdminDashboard = () => {
             loading={dashboardLoading}
           />
         ) : null}
+
+        <SettlementConsole
+          data={settlementOverview}
+          selectedStart={settlementStart}
+          loading={settlementLoading}
+          error={settlementError}
+          actionKey={settlementAction}
+          onWindowChange={setSettlementStart}
+          onRefresh={() => void fetchSettlements(settlementStart)}
+          onSettle={settlePayee}
+        />
 
         <OrderLookup />
 
@@ -584,6 +711,233 @@ const AdminDashboard = () => {
         <p className="text-center text-xs text-[#9A9188]">Admin actions are restricted to the configured administrator account.</p>
       </div>
     </main>
+  );
+};
+
+const SettlementConsole = ({
+  data,
+  selectedStart,
+  loading,
+  error,
+  actionKey,
+  onWindowChange,
+  onRefresh,
+  onSettle,
+}: {
+  data: SettlementOverview | null;
+  selectedStart: string;
+  loading: boolean;
+  error: string | null;
+  actionKey: string | null;
+  onWindowChange: (start: string) => void;
+  onRefresh: () => void;
+  onSettle: (payee: SettlementPayee, entityType: "merchant" | "rider", reference: string) => Promise<void>;
+}) => (
+  <section className="space-y-5 rounded-3xl border border-[#E8E2D9] bg-white p-5 shadow-[0_20px_65px_-48px_rgba(48,42,36,0.5)] sm:p-7">
+    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#AF6028]">Daily accounts · manual payout</p>
+        <h3 className="mt-1 text-2xl font-semibold text-[#302A24]" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
+          Earnings & settlements
+        </h3>
+        <p className="mt-1 max-w-2xl text-sm leading-6 text-[#746C63]">
+          Only paid and delivered orders count. Business day runs 10:40 PM to 10:40 PM Asia/Kolkata. Transfer funds outside SanX first, then enter the UTR/reference to record settlement.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <label className="sr-only" htmlFor="settlement-window">Earning window</label>
+        <select
+          id="settlement-window"
+          value={selectedStart}
+          onChange={(event) => onWindowChange(event.target.value)}
+          disabled={!data || loading}
+          className="min-h-10 rounded-xl border border-[#E2DDD5] bg-white px-3 text-sm text-[#403931] disabled:opacity-60"
+        >
+          {(data?.windows ?? []).map((window) => (
+            <option key={window.start} value={window.start}>
+              {formatSettlementWindow(window.start, window.end)}{window.closed ? "" : " · in progress"}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#E2DDD5] px-3 text-sm font-semibold text-[#403931] disabled:opacity-60"
+        >
+          <FiRefreshCw className={loading ? "animate-spin" : ""} /> Refresh
+        </button>
+      </div>
+    </div>
+
+    {error ? (
+      <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <p>{error}</p>
+        <button type="button" onClick={onRefresh} className="mt-2 font-semibold underline">Try again</button>
+      </div>
+    ) : !data ? (
+      <div className="h-32 animate-pulse rounded-2xl bg-[#F4F2EE]" />
+    ) : (
+      <>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard label="Platform earning" value={formatSettlementMoney(data.summary.platformEarnings)} detail={`2% merchant commission + ${formatSettlementMoney(data.summary.customerPlatformFees)} customer fees`} icon={<FiDollarSign />} accent="orange" />
+          <MetricCard label="Rider delivery earnings" value={formatSettlementMoney(data.summary.deliveryFees)} detail="Delivery fees on paid, delivered orders" icon={<FiTruck />} accent="green" />
+          <MetricCard label="Merchant net earnings" value={formatSettlementMoney(data.summary.grossSales - data.summary.merchantCommission)} detail={`Sales ${formatSettlementMoney(data.summary.grossSales)} less 2% commission`} icon={<FiShoppingBag />} accent="blue" />
+          <MetricCard label="Delivered orders" value={data.summary.orderCount.toLocaleString("en-IN")} detail={`Window: ${formatSettlementWindow(data.window.start, data.window.end)}`} icon={<FiCheckCircle />} accent="blue" />
+        </div>
+
+        {!data.canSettle && (
+          <p className="rounded-xl border border-[#F0E4D2] bg-[#FBF8F3] px-4 py-3 text-sm text-[#79654D]">
+            This earning window is still in progress. Settlement actions unlock after 10:40 PM IST.
+          </p>
+        )}
+
+        <div className="grid gap-5 xl:grid-cols-2">
+          <SettlementPayeeList
+            title="Rider settlements"
+            description={`Pending total: ${formatSettlementMoney(data.summary.pendingRiderSettlements)}`}
+            entityType="rider"
+            payees={data.riders}
+            canSettle={data.canSettle}
+            actionKey={actionKey}
+            onSettle={onSettle}
+          />
+          <SettlementPayeeList
+            title="Merchant settlements"
+            description={`Pending total: ${formatSettlementMoney(data.summary.pendingMerchantSettlements)}`}
+            entityType="merchant"
+            payees={data.merchants}
+            canSettle={data.canSettle}
+            actionKey={actionKey}
+            onSettle={onSettle}
+          />
+        </div>
+      </>
+    )}
+  </section>
+);
+
+const SettlementPayeeList = ({
+  title,
+  description,
+  entityType,
+  payees,
+  canSettle,
+  actionKey,
+  onSettle,
+}: {
+  title: string;
+  description: string;
+  entityType: "merchant" | "rider";
+  payees: SettlementPayee[];
+  canSettle: boolean;
+  actionKey: string | null;
+  onSettle: (payee: SettlementPayee, entityType: "merchant" | "rider", reference: string) => Promise<void>;
+}) => (
+  <section className="overflow-hidden rounded-2xl border border-[#E8E2D9]">
+    <div className="border-b border-[#EEEAE4] bg-[#FBF8F3] px-4 py-3">
+      <h4 className="font-semibold text-[#302A24]">{title}</h4>
+      <p className="mt-0.5 text-xs text-[#8B8177]">{description}</p>
+    </div>
+    {payees.length === 0 ? (
+      <p className="p-5 text-sm text-[#8B8177]">No eligible earnings in this window.</p>
+    ) : (
+      <div className="divide-y divide-[#EEEAE4]">
+        {payees.map((payee) => (
+          <SettlementPayeeCard
+            key={`${entityType}:${payee.id}`}
+            payee={payee}
+            entityType={entityType}
+            canSettle={canSettle}
+            loading={actionKey === `${entityType}:${payee.id}`}
+            onSettle={onSettle}
+          />
+        ))}
+      </div>
+    )}
+  </section>
+);
+
+const SettlementPayeeCard = ({
+  payee,
+  entityType,
+  canSettle,
+  loading,
+  onSettle,
+}: {
+  payee: SettlementPayee;
+  entityType: "merchant" | "rider";
+  canSettle: boolean;
+  loading: boolean;
+  onSettle: (payee: SettlementPayee, entityType: "merchant" | "rider", reference: string) => Promise<void>;
+}) => {
+  const [reference, setReference] = useState("");
+
+  return (
+    <article className="p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h5 className="font-semibold text-[#302A24]">{payee.name}</h5>
+          {payee.owner && <p className="mt-0.5 text-xs text-[#8B8177]">Owner: {payee.owner}</p>}
+          {payee.phoneNumber && <p className="mt-0.5 text-xs text-[#8B8177]">Phone: {payee.phoneNumber}</p>}
+          <p className="mt-1 text-xs text-[#8B8177]">
+            {entityType === "rider"
+              ? `${payee.deliveryCount ?? 0} completed delivery(s)`
+              : `${payee.orderCount ?? 0} completed order(s) · sales ${formatSettlementMoney(payee.grossSales ?? 0)} · commission ${formatSettlementMoney(payee.platformCommission ?? 0)}`}
+          </p>
+        </div>
+        <p className="text-lg font-semibold text-[#302A24]">{formatSettlementMoney(payee.earnings)}</p>
+      </div>
+
+      <div className="mt-3 rounded-xl bg-[#F8F6F2] p-3 text-xs text-[#62594F]">
+        {payee.accountNumber && payee.ifscCode && (
+          <p><span className="font-semibold">Bank:</span> {payee.accountNumber} · IFSC {payee.ifscCode}</p>
+        )}
+        {payee.upiId && <p className="mt-1"><span className="font-semibold">UPI:</span> {payee.upiId}</p>}
+        {payee.upiQrCode && (
+          <a href={payee.upiQrCode} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 font-semibold text-[#AF6028] underline">
+            View UPI QR code <FiExternalLink />
+          </a>
+        )}
+        {!payee.payoutDetailsAvailable && <p className="text-red-700">Payout details are missing; settlement is unavailable.</p>}
+      </div>
+
+      {payee.settled ? (
+        <p className="mt-3 rounded-lg bg-[#ECF4EE] px-3 py-2 text-xs font-semibold text-[#365343]">
+          Settled · reference {payee.reference || "recorded"}{payee.settledAt ? ` · ${new Date(payee.settledAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST` : ""}
+        </p>
+      ) : (
+        <form
+          className="mt-3 flex flex-col gap-2 sm:flex-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!window.confirm(
+              `Confirm you already transferred ${formatSettlementMoney(payee.earnings)} to ${payee.name}.`,
+            )) return;
+            void onSettle(payee, entityType, reference.trim());
+          }}
+        >
+          <label className="sr-only" htmlFor={`reference-${entityType}-${payee.id}`}>UPI or bank transfer reference</label>
+          <input
+            id={`reference-${entityType}-${payee.id}`}
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            required
+            minLength={4}
+            maxLength={100}
+            placeholder="Transfer UTR / reference"
+            className="min-h-10 min-w-0 flex-1 rounded-lg border border-[#E2DDD5] px-3 text-sm outline-none focus:border-[#AF6028]"
+          />
+          <button
+            type="submit"
+            disabled={!canSettle || !payee.payoutDetailsAvailable || payee.earnings <= 0 || loading}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#302A24] px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FiCheckCircle /> {loading ? "Recording…" : "Mark transfer paid"}
+          </button>
+        </form>
+      )}
+    </article>
   );
 };
 

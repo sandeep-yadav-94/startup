@@ -1,7 +1,76 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
+import type { AdminRequest } from "../middlewares/isAdmin.js";
 import TryCatch from "../middlewares/trycatch.js";
-import { Business, Order, Rider, User } from "../models/entities.js";
+import { getCurrentEarningWindow, getWindowFromStart, isValidWindowStart, roundMoney } from "../config/earningWindow.js";
+import { Business, Order, Rider, Settlement, User } from "../models/entities.js";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MERCHANT_COMMISSION_RATE = 0.02;
+
+const getSettlementWindow = (rawStart: unknown) => {
+  const current = getCurrentEarningWindow();
+  if (rawStart === undefined) return current;
+  if (typeof rawStart !== "string") return null;
+
+  const start = new Date(rawStart);
+  if (!Number.isFinite(start.getTime()) || !isValidWindowStart(start) || start > current.start) {
+    return null;
+  }
+  return getWindowFromStart(start);
+};
+
+const getSettlementAggregates = (start: Date, end: Date) => Order.aggregate<{
+  merchants: Array<{ _id: string; grossSales: number; orderCount: number }>;
+  riders: Array<{ _id: string; earnings: number; deliveryCount: number }>;
+  totals: Array<{
+    orderCount: number;
+    grossSales: number;
+    deliveryFees: number;
+    customerPlatformFees: number;
+  }>;
+}>([
+  {
+    $match: {
+      paymentStatus: "paid",
+      status: "delivered",
+      deliveredAt: { $gte: start, $lt: end },
+    },
+  },
+  {
+    $facet: {
+      merchants: [
+        { $group: { _id: "$businessId", grossSales: { $sum: "$subtotal" }, orderCount: { $sum: 1 } } },
+      ],
+      riders: [
+        { $match: { riderUserId: { $type: "string", $ne: "" } } },
+        { $group: { _id: "$riderUserId", earnings: { $sum: "$deliveryFee" }, deliveryCount: { $sum: 1 } } },
+      ],
+      totals: [
+        {
+          $group: {
+            _id: null,
+            orderCount: { $sum: 1 },
+            grossSales: { $sum: "$subtotal" },
+            deliveryFees: { $sum: "$deliveryFee" },
+            customerPlatformFees: { $sum: "$platformFee" },
+          },
+        },
+      ],
+    },
+  },
+]);
+
+const hasPayoutDetails = (profile: {
+  accountNumber?: string;
+  ifscCode?: string;
+  upiId?: string;
+  upiQrCode?: string;
+}) => Boolean(
+  (profile.accountNumber && profile.ifscCode) ||
+  profile.upiId ||
+  profile.upiQrCode,
+);
 
 const maskSensitiveValue = (value: string | number | null | undefined) => {
   if (value === undefined || value === null || value === "") return value;
@@ -419,4 +488,237 @@ export const updateRiderVerification = TryCatch(async (req: Request, res: Respon
     message: isVerified ? "Rider verified" : "Rider verification revoked",
     isVerified: rider.isVerified,
   });
+});
+
+export const getSettlementOverview = TryCatch(async (req: Request, res: Response) => {
+  const window = getSettlementWindow(req.query.start);
+  if (!window) {
+    return res.status(400).json({ message: "Choose a valid 10:40 PM India-time earning window" });
+  }
+
+  const [aggregateResult] = await getSettlementAggregates(window.start, window.end);
+  const merchantTotals = aggregateResult?.merchants ?? [];
+  const riderTotals = aggregateResult?.riders ?? [];
+  const summary = aggregateResult?.totals[0] ?? {
+    orderCount: 0,
+    grossSales: 0,
+    deliveryFees: 0,
+    customerPlatformFees: 0,
+  };
+  const merchantIds = merchantTotals.map((entry) => entry._id);
+  const riderUserIds = riderTotals.map((entry) => entry._id);
+  const [businesses, riders, settlements] = await Promise.all([
+    Business.find({ _id: { $in: merchantIds } }).lean(),
+    Rider.find({ userId: { $in: riderUserIds } }).lean(),
+    Settlement.find({ periodStart: window.start, periodEnd: window.end }).lean(),
+  ]);
+  const ownerIds = businesses.map((entry) => entry.ownerId).filter(Boolean);
+  const userIds = [
+    ...ownerIds,
+    ...riders.map((entry) => entry.userId),
+  ];
+  const users = await User.find({ _id: { $in: userIds } }).select("name email").lean();
+  const usersById = new Map(users.map((entry) => [entry._id.toString(), entry]));
+  const businessesById = new Map(businesses.map((entry) => [entry._id.toString(), entry]));
+  const ridersByUserId = new Map(riders.map((entry) => [entry.userId, entry]));
+  const settlementsByKey = new Map(
+    settlements.map((entry) => [`${entry.entityType}:${entry.entityId}`, entry]),
+  );
+
+  const merchants = merchantTotals.map((entry) => {
+    const profile = businessesById.get(entry._id);
+    const commission = roundMoney(roundMoney(entry.grossSales) * MERCHANT_COMMISSION_RATE);
+    const settlement = settlementsByKey.get(`merchant:${entry._id}`);
+    return {
+      id: entry._id,
+      name: profile?.name ?? "Merchant",
+      owner: usersById.get(profile?.ownerId ?? "")?.name ?? "Business owner",
+      orderCount: entry.orderCount,
+      grossSales: roundMoney(entry.grossSales),
+      platformCommission: commission,
+      earnings: roundMoney(entry.grossSales - commission),
+      settled: Boolean(settlement),
+      settledAt: settlement?.settledAt ?? null,
+      reference: settlement?.reference ?? null,
+      payoutDetailsAvailable: profile ? hasPayoutDetails(profile) : false,
+      accountNumber: profile?.accountNumber ?? null,
+      ifscCode: profile?.ifscCode ?? null,
+      upiId: profile?.upiId ?? null,
+      upiQrCode: profile?.upiQrCode ?? null,
+    };
+  });
+
+  const riderEntries = riderTotals.map((entry) => {
+    const profile = ridersByUserId.get(entry._id);
+    const settlement = settlementsByKey.get(`rider:${entry._id}`);
+    return {
+      id: entry._id,
+      name: usersById.get(entry._id)?.name ?? "Rider",
+      phoneNumber: profile?.phoneNumber ?? null,
+      deliveryCount: entry.deliveryCount,
+      earnings: roundMoney(entry.earnings),
+      settled: Boolean(settlement),
+      settledAt: settlement?.settledAt ?? null,
+      reference: settlement?.reference ?? null,
+      payoutDetailsAvailable: profile ? hasPayoutDetails(profile) : false,
+      accountNumber: profile?.accountNumber ?? null,
+      ifscCode: profile?.ifscCode ?? null,
+      upiId: profile?.upiId ?? null,
+      upiQrCode: profile?.upiQrCode ?? null,
+    };
+  });
+
+  const now = new Date();
+  const currentWindow = getCurrentEarningWindow(now);
+  const windows = Array.from({ length: 8 }, (_, index) => {
+    const start = new Date(currentWindow.start.getTime() - index * DAY_MS);
+    const option = getWindowFromStart(start);
+    return {
+      start: option.start.toISOString(),
+      end: option.end.toISOString(),
+      closed: option.end.getTime() <= now.getTime(),
+    };
+  });
+  const merchantCommission = roundMoney(
+    merchants.reduce((total, entry) => total + entry.platformCommission, 0),
+  );
+  const customerPlatformFees = roundMoney(summary.customerPlatformFees);
+
+  return res.json({
+    window: { start: window.start.toISOString(), end: window.end.toISOString() },
+    windows,
+    canSettle: window.end.getTime() <= now.getTime(),
+    summary: {
+      orderCount: summary.orderCount,
+      grossSales: roundMoney(summary.grossSales),
+      deliveryFees: roundMoney(summary.deliveryFees),
+      merchantCommission,
+      customerPlatformFees,
+      platformEarnings: roundMoney(merchantCommission + customerPlatformFees),
+      pendingRiderSettlements: roundMoney(
+        riderEntries.filter((entry) => !entry.settled).reduce((total, entry) => total + entry.earnings, 0),
+      ),
+      pendingMerchantSettlements: roundMoney(
+        merchants.filter((entry) => !entry.settled).reduce((total, entry) => total + entry.earnings, 0),
+      ),
+    },
+    merchants,
+    riders: riderEntries,
+  });
+});
+
+export const recordSettlement = TryCatch(async (req: AdminRequest, res: Response) => {
+  const { entityType, entityId, periodStart, reference } = req.body as {
+    entityType?: unknown;
+    entityId?: unknown;
+    periodStart?: unknown;
+    reference?: unknown;
+  };
+  if (
+    (entityType !== "merchant" && entityType !== "rider") ||
+    typeof entityId !== "string" ||
+    !mongoose.isValidObjectId(entityId) ||
+    typeof periodStart !== "string" ||
+    typeof reference !== "string" ||
+    reference.trim().length < 4 ||
+    reference.trim().length > 100
+  ) {
+    return res.status(400).json({
+      message: "A valid payee, earning window, and transfer reference are required",
+    });
+  }
+
+  const start = new Date(periodStart);
+  if (!Number.isFinite(start.getTime()) || !isValidWindowStart(start)) {
+    return res.status(400).json({ message: "Choose a valid 10:40 PM India-time earning window" });
+  }
+  const { end } = getWindowFromStart(start);
+  if (end.getTime() > Date.now()) {
+    return res.status(409).json({ message: "This earning window has not closed yet" });
+  }
+
+  const existing = await Settlement.findOne({
+    entityType,
+    entityId,
+    periodStart: start,
+    periodEnd: end,
+  }).lean();
+  if (existing) {
+    return res.status(409).json({ message: "This earning has already been settled" });
+  }
+
+  let amount = 0;
+  let payoutProfile: { accountNumber?: string; ifscCode?: string; upiId?: string; upiQrCode?: string } | null = null;
+  if (entityType === "merchant") {
+    const business = await Business.findById(entityId).lean();
+    if (!business) return res.status(404).json({ message: "Merchant business not found" });
+    payoutProfile = business;
+    const [summary] = await Order.aggregate<{ grossSales: number }>([
+      {
+        $match: {
+          businessId: entityId,
+          paymentStatus: "paid",
+          status: "delivered",
+          deliveredAt: { $gte: start, $lt: end },
+        },
+      },
+      { $group: { _id: null, grossSales: { $sum: "$subtotal" } } },
+    ]);
+    const grossSales = roundMoney(summary?.grossSales ?? 0);
+    amount = roundMoney(grossSales - roundMoney(grossSales * MERCHANT_COMMISSION_RATE));
+  } else {
+    const rider = await Rider.findOne({ userId: entityId }).lean();
+    if (!rider) return res.status(404).json({ message: "Rider profile not found" });
+    payoutProfile = rider;
+    const [summary] = await Order.aggregate<{ earnings: number }>([
+      {
+        $match: {
+          riderUserId: entityId,
+          paymentStatus: "paid",
+          status: "delivered",
+          deliveredAt: { $gte: start, $lt: end },
+        },
+      },
+      { $group: { _id: null, earnings: { $sum: "$deliveryFee" } } },
+    ]);
+    amount = roundMoney(summary?.earnings ?? 0);
+  }
+
+  if (!payoutProfile || !hasPayoutDetails(payoutProfile)) {
+    return res.status(409).json({ message: "Payee payout details are missing" });
+  }
+  if (amount <= 0) {
+    return res.status(409).json({ message: "There are no eligible earnings to settle" });
+  }
+  if (!req.user) {
+    return res.status(401).json({ message: "Admin authentication required" });
+  }
+
+  try {
+    const settlement = await Settlement.create({
+      entityType,
+      entityId,
+      periodStart: start,
+      periodEnd: end,
+      amount,
+      reference: reference.trim(),
+      settledBy: req.user.email,
+      settledAt: new Date(),
+    });
+    return res.status(201).json({
+      message: "Settlement recorded",
+      settlement: {
+        entityType: settlement.entityType,
+        entityId: settlement.entityId,
+        amount: settlement.amount,
+        reference: settlement.reference,
+        settledAt: settlement.settledAt,
+      },
+    });
+  } catch (error: unknown) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+      return res.status(409).json({ message: "This earning has already been settled" });
+    }
+    throw error;
+  }
 });

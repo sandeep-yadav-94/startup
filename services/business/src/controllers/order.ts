@@ -7,6 +7,111 @@ import Cart from "../models/Cart.js";
 import Order, { type IOrder } from "../models/Order.js";
 import { IServiceList } from "../models/ServiceList.js";
 import { publishEvent } from "../config/order.publisher.js";
+import Settlement from "../models/Settlement.js";
+import { getCurrentEarningWindow } from "../config/earningWindow.js";
+
+const roundMoney = (amount: number) => Math.round((amount + Number.EPSILON) * 100) / 100;
+
+const getCompletedOrderEarnings = async (
+    match: Record<string, unknown>,
+    start: Date,
+    end: Date,
+) => {
+    const [summary] = await Order.aggregate<{
+        orderCount: number;
+        subtotal: number;
+        deliveryFees: number;
+    }>([
+        {
+            $match: {
+                ...match,
+                paymentStatus: "paid",
+                status: "delivered",
+                deliveredAt: { $gte: start, $lt: end },
+            },
+        },
+        {
+            $group: {
+                _id: null,
+                orderCount: { $sum: 1 },
+                subtotal: { $sum: "$subtotal" },
+                deliveryFees: { $sum: "$deliveryFee" },
+            },
+        },
+    ]);
+
+    return summary ?? { orderCount: 0, subtotal: 0, deliveryFees: 0 };
+};
+
+export const getMerchantEarnings = TryCatch(async (req: AuthenticatedRequest, res) => {
+    const user = req.user;
+    if (!user || user.role !== "merchant") {
+        return res.status(403).json({ message: "Merchant access required" });
+    }
+
+    const merchantBusiness = await business.findOne({ ownerId: user._id.toString() });
+    if (!merchantBusiness) {
+        return res.status(404).json({ message: "Business not found" });
+    }
+
+    const { start, end } = getCurrentEarningWindow();
+    const summary = await getCompletedOrderEarnings(
+        { businessId: merchantBusiness._id.toString() },
+        start,
+        end,
+    );
+    const grossSales = roundMoney(summary.subtotal);
+    const platformCommission = roundMoney(grossSales * 0.02);
+    const settlement = await Settlement.findOne({
+        entityType: "merchant",
+        entityId: merchantBusiness._id.toString(),
+        periodStart: start,
+        periodEnd: end,
+    }).lean();
+
+    return res.json({
+        window: { start: start.toISOString(), end: end.toISOString() },
+        summary: {
+            orderCount: summary.orderCount,
+            grossSales,
+            platformCommission,
+            netEarnings: roundMoney(grossSales - platformCommission),
+            settledAmount: settlement?.amount ?? 0,
+            pendingSettlement: roundMoney(grossSales - platformCommission - (settlement?.amount ?? 0)),
+        },
+    });
+});
+
+export const getRiderEarnings = TryCatch(async (req: AuthenticatedRequest, res) => {
+    const user = req.user;
+    if (!user || user.role !== "rider") {
+        return res.status(403).json({ message: "Rider access required" });
+    }
+
+    const { start, end } = getCurrentEarningWindow();
+    const summary = await getCompletedOrderEarnings(
+        { riderUserId: user._id.toString() },
+        start,
+        end,
+    );
+    const settlement = await Settlement.findOne({
+        entityType: "rider",
+        entityId: user._id.toString(),
+        periodStart: start,
+        periodEnd: end,
+    }).lean();
+    const earnings = roundMoney(summary.deliveryFees);
+
+    return res.json({
+        window: { start: start.toISOString(), end: end.toISOString() },
+        summary: {
+            deliveryCount: summary.orderCount,
+            earnings,
+            settledAmount: settlement?.amount ?? 0,
+            pendingSettlement: roundMoney(earnings - (settlement?.amount ?? 0)),
+        },
+    });
+});
 
 const emitOrderEvent = async (
     order: IOrder,
@@ -144,7 +249,7 @@ export const createOrder = TryCatch(async(req:AuthenticatedRequest, res)=>{
     });
 
     const deliveryFee = 5 + subtotal * 0.02;
-    const platformFee = 1;
+    const platformFee = 1 + subtotal * 0.025;
     const totalAmount = subtotal + deliveryFee + platformFee;
 
     const expiresAt = new Date(Date.now() + 15*60*1000);
@@ -163,7 +268,7 @@ export const createOrder = TryCatch(async(req:AuthenticatedRequest, res)=>{
 
     const distance = calculateDistanceKm(latitude, longitude, businessLatitude, businessLongitude);
 
-    const riderAmount = Math.ceil(distance*17);
+    const riderAmount = deliveryFee;
 
     const order = await Order.create({
         userId: user._id.toString(),

@@ -3,6 +3,7 @@ import { useAppData } from "../context/AppContext";
 import { useSocket } from "../context/SocketContext";
 import axios from "axios";
 import { riderService } from "../main";
+import { businessService } from "../config";
 import toast from "react-hot-toast";
 import {
   FiActivity,
@@ -54,6 +55,31 @@ export interface IRider {
 
 }
 
+interface RiderEarnings {
+  window: { start: string; end: string };
+  summary: {
+    deliveryCount: number;
+    earnings: number;
+    settledAmount: number;
+    pendingSettlement: number;
+  };
+}
+
+const formatEarningWindow = (window: RiderEarnings["window"]) => {
+  const formatter = new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  });
+  return `${formatter.format(new Date(window.start))} – ${formatter.format(new Date(window.end))} IST`;
+};
+const formatRiderEarnings = (amount: number) => new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+}).format(amount);
+
 const RiderDashboard = () => {
 
   const {user} = useAppData();
@@ -67,6 +93,8 @@ const RiderDashboard = () => {
 
   const [incomingOrders, setIncomingOrders] = useState<string[]>([]);
   const [currentOrder, setCurrentOrder] = useState<IOrder | null>(null);
+  const [earnings, setEarnings] = useState<RiderEarnings | null>(null);
+  const [earningsError, setEarningsError] = useState("");
   const [updatingOrder, setUpdatingOrder] = useState(false);
   const incomingOrderIds = useRef(new Set<string>());
 
@@ -169,6 +197,32 @@ useEffect(()=>{
   if (user?.role === "rider") void Promise.resolve().then(fetchCurrentOrder);
 }, [user?.role, fetchCurrentOrder]);
 
+const fetchEarnings = useCallback(async () => {
+  const token = localStorage.getItem("token");
+  if (!token?.trim()) {
+    setEarningsError("Sign in again to view your earnings.");
+    return;
+  }
+  try {
+    const { data } = await axios.get<RiderEarnings>(`${businessService}/api/order/earnings/rider`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    setEarnings(data);
+    setEarningsError("");
+  } catch (error: unknown) {
+    console.error("Failed to fetch rider earnings:", error);
+    setEarningsError("Your daily earnings could not be loaded. Please refresh.");
+  }
+}, []);
+
+useEffect(() => {
+  if (user?.role === "rider") void Promise.resolve().then(fetchEarnings);
+  const timer = window.setInterval(() => {
+    if (user?.role === "rider") void fetchEarnings();
+  }, 60_000);
+  return () => window.clearInterval(timer);
+}, [user?.role, fetchEarnings]);
+
 useEffect(() => {
   if (!profile?.isAvailble || profile.isBusy || currentOrder) {
     setLocationTrackingError(null);
@@ -236,6 +290,7 @@ useEffect(() => {
   const onOrderUpdated = () => {
     void fetchCurrentOrder();
     void fetchProfile(false);
+    void fetchEarnings();
   };
   const onSocketConnected = () => {
     void fetchCurrentOrder();
@@ -251,7 +306,7 @@ useEffect(() => {
     socket.off("order_update", onOrderUpdated);
     socket.off("connect", onSocketConnected);
   };
-}, [socket, fetchCurrentOrder, fetchProfile]);
+}, [socket, fetchCurrentOrder, fetchProfile, fetchEarnings]);
 
 const updateCurrentOrder = async () => {
   if (!currentOrder) return;
@@ -267,7 +322,7 @@ const updateCurrentOrder = async () => {
       },
     );
     toast.success(data.message);
-    await Promise.all([fetchCurrentOrder(), fetchProfile(false)]);
+    await Promise.all([fetchCurrentOrder(), fetchProfile(false), fetchEarnings()]);
   } catch (error: unknown) {
     const message = axios.isAxiosError(error)
       ? error.response?.data?.message
@@ -914,6 +969,28 @@ if (!profile) {
           <RiderSummaryCard icon={<FiPackage />} label="Active delivery" value={currentOrder ? `#${currentOrder._id.slice(-6)}` : "No active order"} detail={currentOrder ? currentOrder.status.replaceAll("_", " ") : "Your next delivery starts here"} active={Boolean(currentOrder)} />
         </section>
 
+        <section className="mt-4 rounded-2xl border border-[#DFE9E1] bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#64816F]">Daily rider earnings · 10:40 PM cutoff</p>
+              <h2 className="mt-2 text-2xl font-semibold text-[#2D3C34]">
+                {earnings ? formatRiderEarnings(earnings.summary.earnings) : earningsError ? "Earnings unavailable" : "Loading earnings…"}
+              </h2>
+              {earningsError && <p role="alert" className="mt-1 text-sm text-red-600">{earningsError}</p>}
+              {earnings && (
+                <>
+                  <p className="mt-1 text-sm text-[#73857A]">{earnings.summary.deliveryCount} paid and delivered order(s) · delivery fees are your earnings</p>
+                  <p className="mt-2 text-xs text-[#8A968E]">{formatEarningWindow(earnings.window)}</p>
+                </>
+              )}
+            </div>
+            <div className="rounded-xl bg-[#ECF4EE] px-4 py-3 text-sm text-[#365343]">
+              <p className="font-semibold">Settlement</p>
+              <p className="mt-1">{earnings ? `Pending: ${formatRiderEarnings(earnings.summary.pendingSettlement)}` : "Admin settles after the window closes"}</p>
+            </div>
+          </div>
+        </section>
+
         {!audioUnlocked && (
           <motion.section
             initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
@@ -1002,8 +1079,8 @@ if (!profile) {
                       <p className="mt-1 text-lg font-semibold text-[#35443B]">₹{currentOrder.totalAmount}</p>
                     </div>
                     <div className="border-l border-[#E2EAE2] pl-4">
-                      <p className="flex items-center gap-1 text-xs text-[#87938B]"><FiDollarSign /> Your earning</p>
-                      <p className="mt-1 text-lg font-semibold text-[#43704F]">₹{currentOrder.riderAmount}</p>
+                      <p className="flex items-center gap-1 text-xs text-[#87938B]"><FiDollarSign /> Delivery fee</p>
+                      <p className="mt-1 text-lg font-semibold text-[#43704F]">{formatRiderEarnings(currentOrder.deliveryFee)}</p>
                     </div>
                   </div>
                   <a
