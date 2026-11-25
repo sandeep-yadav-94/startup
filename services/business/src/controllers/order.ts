@@ -340,6 +340,50 @@ export const fetchOrderForPayment = TryCatch(async(req, res)=>{
     })
 })
 
+export const confirmOrderPayment = TryCatch(async(req, res)=>{
+    if(req.headers["x-internal-key"] !== process.env.INTERNAL_SERVICE_KEY){
+        return res.status(403).json({
+            message:"Unauthorized"
+        })
+    }
+
+    const {orderId} = req.body;
+    if(typeof orderId !== "string" || !orderId){
+        return res.status(400).json({
+            message:"Order ID is required"
+        })
+    }
+
+    const updatedOrder = await Order.findOneAndUpdate(
+        { _id: orderId, paymentStatus: "pending" },
+        {
+            $set: { paymentStatus: "paid", status: "placed" },
+            $unset: { expiresAt: 1 },
+        },
+        { new: true },
+    );
+    const order = updatedOrder ?? await Order.findById(orderId);
+    if(!order){
+        return res.status(404).json({
+            message:"Order not found"
+        })
+    }
+    if(order.paymentStatus !== "paid"){
+        return res.status(409).json({
+            message:"Order is not awaiting payment"
+        })
+    }
+
+    await emitOrderEvent(order, "order:new", {
+        orderId: order._id.toString(),
+    });
+
+    return res.json({
+        message:"Payment confirmed successfully",
+        orderId:order._id.toString(),
+    })
+})
+
 
 export const fetchBusinessOrders = TryCatch(async(req:AuthenticatedRequest, res)=>{
 

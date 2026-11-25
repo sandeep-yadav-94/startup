@@ -7,9 +7,9 @@ import { AppProvider } from './context/AppContext.tsx';
 import "leaflet/dist/leaflet.css"
 import { SocketProvider } from './context/SocketContext.tsx';
 
-export const utilsService =  "http://localhost:5002";
-export const realtimeService = "http://localhost:5004";
-export const riderService = "http://localhost:5005";
+export const utilsService =  "https://utils-service-todn.onrender.com";
+export const realtimeService = "https://realtime-service-2qt6.onrender.com";
+export const riderService = "https://rider-service-mbgc.onrender.com";
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

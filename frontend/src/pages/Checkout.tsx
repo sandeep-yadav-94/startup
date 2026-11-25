@@ -19,6 +19,12 @@ interface Address {
  mobile: number;
 }
 
+interface RazorpayPaymentResponse {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
 const Checkout = () => {
 
   const{cart, subTotal, fetchCart} = useAppData();
@@ -76,7 +82,6 @@ const Checkout = () => {
 
   const grandTotal = subTotal + deliveryFee + platformFee;
 
-
   const createOrder = async (paymentMethod: "razorpay") => {
     if(!selectedAddressId) {
       alert("Please select an address");
@@ -127,7 +132,7 @@ const Checkout = () => {
         image: logo,
         description: "Service booking Order Payment",
         order_id: razorpayOrderId,
-        handler: async function (response: any) {
+        handler: async function (response: RazorpayPaymentResponse) {
           try {
             await axios.post(`${utilsService}/api/payment/verify`, {
               razorpay_order_id: response.razorpay_order_id,

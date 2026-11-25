@@ -1,3 +1,4 @@
-export const authService = "http://localhost:5000";
-export const businessService = "http://localhost:5001";
-export const adminService = "http://localhost:5006";
+
+export const authService = "https://startup-auth.onrender.com";
+export const businessService = "https://business-service-aqrt.onrender.com";
+export const adminService = "https://admin-service-4lig.onrender.com";

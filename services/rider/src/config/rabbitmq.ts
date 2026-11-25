@@ -19,11 +19,19 @@ const scheduleReconnect = (onConnected?: OnConnected) => {
 
 const openConnection = async (onConnected?: OnConnected): Promise<void> => {
   if (connecting) return;
+
+  const rabbitmqUrl = process.env.RABBITMQ_URL;
+  const orderReadyQueue = process.env.ORDER_READY_QUEUE;
+  if (!rabbitmqUrl || !orderReadyQueue) {
+    console.error("RabbitMQ is disabled: set RABBITMQ_URL and ORDER_READY_QUEUE.");
+    return;
+  }
+
   connecting = true;
 
   let nextChannel: amqp.Channel | undefined;
   try {
-    const connection = await amqp.connect(process.env.RABBITMQ_URL || "amqp://localhost");
+    const connection = await amqp.connect(rabbitmqUrl);
     connection.on("error", (error) => console.error("RabbitMQ connection error (rider service):", error));
 
     nextChannel = await connection.createChannel();
@@ -39,7 +47,7 @@ const openConnection = async (onConnected?: OnConnected): Promise<void> => {
     connection.on("close", handleClose);
     nextChannel.on("close", handleClose);
 
-    await nextChannel.assertQueue(process.env.ORDER_READY_QUEUE!, { durable: true });
+    await nextChannel.assertQueue(orderReadyQueue, { durable: true });
     channel = nextChannel;
     connecting = false;
 

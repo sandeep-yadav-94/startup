@@ -19,11 +19,20 @@ const scheduleReconnect = (onConnected?: OnConnected) => {
 
 const openConnection = async (onConnected?: OnConnected): Promise<void> => {
   if (connecting) return;
+
+  const rabbitmqUrl = process.env.RABBITMQ_URL;
+  const paymentQueue = process.env.PAYMENT_QUEUE;
+  const orderReadyQueue = process.env.ORDER_READY_QUEUE;
+  if (!rabbitmqUrl || !paymentQueue || !orderReadyQueue) {
+    console.error("RabbitMQ is disabled: set RABBITMQ_URL, PAYMENT_QUEUE, and ORDER_READY_QUEUE.");
+    return;
+  }
+
   connecting = true;
 
   let nextChannel: amqp.Channel | undefined;
   try {
-    const connection = await amqp.connect(process.env.RABBITMQ_URL || "amqp://localhost");
+    const connection = await amqp.connect(rabbitmqUrl);
     connection.on("error", (error) => console.error("RabbitMQ connection error (business service):", error));
 
     nextChannel = await connection.createChannel();
@@ -39,8 +48,8 @@ const openConnection = async (onConnected?: OnConnected): Promise<void> => {
     connection.on("close", handleClose);
     nextChannel.on("close", handleClose);
 
-    await nextChannel.assertQueue(process.env.PAYMENT_QUEUE!, { durable: true });
-    await nextChannel.assertQueue(process.env.ORDER_READY_QUEUE!, { durable: true });
+    await nextChannel.assertQueue(paymentQueue, { durable: true });
+    await nextChannel.assertQueue(orderReadyQueue, { durable: true });
     channel = nextChannel;
     connecting = false;
 
